@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -26,15 +27,20 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) (*domain.Us
 		Name:         u.Name,
 		Email:        u.Email,
 		PasswordHash: u.PasswordHash,
+		Role:         string(u.Role),
 	})
 	if err != nil {
+		// The insert selects the role by title, so no rows means the role does not exist.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("unknown role %q", u.Role)
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, domain.ErrEmailTaken
 		}
 		return nil, err
 	}
-	return toDomain(row), nil
+	return toDomain(row, string(u.Role)), nil
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
@@ -42,7 +48,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return toDomain(row), nil
+	return toDomain(row.User, row.Role), nil
 }
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
@@ -50,7 +56,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return toDomain(row), nil
+	return toDomain(row.User, row.Role), nil
 }
 
 func mapErr(err error) error {
@@ -65,9 +71,10 @@ func mapErr(err error) error {
 	return err
 }
 
-func toDomain(row sqlc.User) *domain.User {
+func toDomain(row sqlc.User, role string) *domain.User {
 	return &domain.User{
 		ID:           row.ID,
+		Role:         domain.Role(role),
 		Name:         row.Name,
 		Email:        row.Email,
 		PasswordHash: row.PasswordHash,

@@ -10,6 +10,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Note struct {
+	ID        string
+	UserID    string
+	Title     string
+	Content   string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NoteTag struct {
+	ID      string
+	NotesID string
+	Title   string
+}
+
 type Session struct {
 	ID         string
 	UserID     string
@@ -24,9 +39,15 @@ type Session struct {
 
 type User struct {
 	ID           string
+	RoleID       int32
 	Name         string
 	Email        string
 	PasswordHash string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
+}
+
+type UserRole struct {
+	ID    int32
+	Title string
 }

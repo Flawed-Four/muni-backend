@@ -52,6 +52,7 @@ func (u *AuthUsecase) Register(ctx context.Context, name, email, password string
 	}
 
 	return u.users.Create(ctx, &domain.User{
+		Role:         domain.RoleUser,
 		Name:         name,
 		Email:        email,
 		PasswordHash: hash,

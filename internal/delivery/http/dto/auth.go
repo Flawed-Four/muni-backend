@@ -27,11 +27,12 @@ type UserResponse struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
+	Role      string    `json:"role" example:"user"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
 func NewUserResponse(u *domain.User) UserResponse {
-	return UserResponse{ID: u.ID, Name: u.Name, Email: u.Email, CreatedAt: u.CreatedAt}
+	return UserResponse{ID: u.ID, Name: u.Name, Email: u.Email, Role: string(u.Role), CreatedAt: u.CreatedAt}
 }
 
 // Envelope types below exist only so swag can document the response shape.

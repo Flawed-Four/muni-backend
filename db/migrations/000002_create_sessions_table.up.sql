@@ -10,5 +10,6 @@ CREATE TABLE sessions (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_sessions_user_id    ON sessions (user_id);
-CREATE INDEX idx_sessions_expires_at ON sessions (expires_at);
+CREATE INDEX idx_sessions_user_id            ON sessions (user_id);
+CREATE INDEX idx_sessions_expires_at         ON sessions (expires_at);
+CREATE INDEX idx_sessions_user_id_revoked_at ON sessions (user_id, revoked_at);

@@ -314,6 +314,10 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "role": {
+                    "type": "string",
+                    "example": "user"
                 }
             }
         },

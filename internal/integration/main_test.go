@@ -113,9 +113,10 @@ func getenv(key, fallback string) string {
 }
 
 // resetDB empties all tables so every test starts from a clean state.
+// user_roles is deliberately not truncated: it holds rows seeded by the migrations.
 func resetDB(t *testing.T) {
 	t.Helper()
-	if _, err := testPool.Exec(context.Background(), "TRUNCATE users, sessions CASCADE"); err != nil {
+	if _, err := testPool.Exec(context.Background(), "TRUNCATE users, sessions, notes, note_tags CASCADE"); err != nil {
 		t.Fatalf("truncate tables: %v", err)
 	}
 }

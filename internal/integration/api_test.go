@@ -92,7 +92,7 @@ func TestRegisterLoginMe(t *testing.T) {
 	resetDB(t)
 
 	user := register(t, "Harun", "Harun@Example.com", "s3cretpass")
-	if user.ID == "" || user.Email != "harun@example.com" {
+	if user.ID == "" || user.Email != "harun@example.com" || user.Role != "user" {
 		t.Fatalf("unexpected user: %+v", user)
 	}
 
@@ -101,7 +101,7 @@ func TestRegisterLoginMe(t *testing.T) {
 	rec := do(t, http.MethodGet, "/api/v1/users/me", nil, token)
 	wantStatus(t, rec, http.StatusOK)
 	me := data[dto.UserResponse](t, rec)
-	if me.ID != user.ID || me.Name != "Harun" {
+	if me.ID != user.ID || me.Name != "Harun" || me.Role != "user" {
 		t.Fatalf("me = %+v, want id %s", me, user.ID)
 	}
 }

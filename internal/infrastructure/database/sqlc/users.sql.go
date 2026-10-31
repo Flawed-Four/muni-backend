@@ -10,22 +10,32 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (name, email, password_hash)
-VALUES ($1, $2, $3)
-RETURNING id, name, email, password_hash, created_at, updated_at
+INSERT INTO users (role_id, name, email, password_hash)
+SELECT r.id, $1, $2, $3
+FROM user_roles r
+WHERE r.title = $4
+RETURNING id, role_id, name, email, password_hash, created_at, updated_at
 `
 
 type CreateUserParams struct {
 	Name         string
 	Email        string
 	PasswordHash string
+	Role         string
 }
 
+// The role is resolved by title; zero rows are returned (pgx.ErrNoRows) if it does not exist.
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.Name, arg.Email, arg.PasswordHash)
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Name,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Role,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
+		&i.RoleID,
 		&i.Name,
 		&i.Email,
 		&i.PasswordHash,
@@ -36,37 +46,57 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, created_at, updated_at FROM users WHERE email = $1
+SELECT users.id, users.role_id, users.name, users.email, users.password_hash, users.created_at, users.updated_at, user_roles.title AS role
+FROM users
+JOIN user_roles ON user_roles.id = users.role_id
+WHERE users.email = $1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+type GetUserByEmailRow struct {
+	User User
+	Role string
+}
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
-	var i User
+	var i GetUserByEmailRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.User.ID,
+		&i.User.RoleID,
+		&i.User.Name,
+		&i.User.Email,
+		&i.User.PasswordHash,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
+		&i.Role,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, password_hash, created_at, updated_at FROM users WHERE id = $1
+SELECT users.id, users.role_id, users.name, users.email, users.password_hash, users.created_at, users.updated_at, user_roles.title AS role
+FROM users
+JOIN user_roles ON user_roles.id = users.role_id
+WHERE users.id = $1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
+type GetUserByIDRow struct {
+	User User
+	Role string
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id string) (GetUserByIDRow, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
-	var i User
+	var i GetUserByIDRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.User.ID,
+		&i.User.RoleID,
+		&i.User.Name,
+		&i.User.Email,
+		&i.User.PasswordHash,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
+		&i.Role,
 	)
 	return i, err
 }
