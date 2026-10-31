@@ -7,14 +7,14 @@
 package di
 
 import (
-	"github.com/Flawed-Four/moni-be/internal/config"
-	"github.com/Flawed-Four/moni-be/internal/delivery/http"
-	"github.com/Flawed-Four/moni-be/internal/delivery/http/handler"
-	"github.com/Flawed-Four/moni-be/internal/domain"
-	"github.com/Flawed-Four/moni-be/internal/infrastructure/database"
-	"github.com/Flawed-Four/moni-be/internal/infrastructure/security"
-	"github.com/Flawed-Four/moni-be/internal/repository/postgres"
-	"github.com/Flawed-Four/moni-be/internal/usecase"
+	"github.com/Flawed-Four/muni-backend/internal/config"
+	"github.com/Flawed-Four/muni-backend/internal/delivery/http"
+	"github.com/Flawed-Four/muni-backend/internal/delivery/http/handler"
+	"github.com/Flawed-Four/muni-backend/internal/domain"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/database"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/security"
+	"github.com/Flawed-Four/muni-backend/internal/repository/postgres"
+	"github.com/Flawed-Four/muni-backend/internal/usecase"
 	"github.com/google/wire"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

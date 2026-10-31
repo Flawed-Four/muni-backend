@@ -5,10 +5,10 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
-	_ "github.com/Flawed-Four/moni-be/docs"
-	"github.com/Flawed-Four/moni-be/internal/delivery/http/handler"
-	"github.com/Flawed-Four/moni-be/internal/delivery/http/middleware"
-	"github.com/Flawed-Four/moni-be/internal/domain"
+	_ "github.com/Flawed-Four/muni-backend/docs"
+	"github.com/Flawed-Four/muni-backend/internal/delivery/http/handler"
+	"github.com/Flawed-Four/muni-backend/internal/delivery/http/middleware"
+	"github.com/Flawed-Four/muni-backend/internal/domain"
 )
 
 func NewRouter(

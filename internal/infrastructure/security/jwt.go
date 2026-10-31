@@ -5,8 +5,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/Flawed-Four/moni-be/internal/config"
-	"github.com/Flawed-Four/moni-be/internal/domain"
+	"github.com/Flawed-Four/muni-backend/internal/config"
+	"github.com/Flawed-Four/muni-backend/internal/domain"
 )
 
 type JWTService struct {

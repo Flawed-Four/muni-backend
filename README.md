@@ -1,6 +1,6 @@
-# moni-be
+# muni-backend
 
-Backend Moni — Go, Gin, PostgreSQL (pgx + sqlc), Google Wire, Swagger.
+Backend Muni — Go, Gin, PostgreSQL (pgx + sqlc), Google Wire, Swagger.
 
 ## Arsitektur
 

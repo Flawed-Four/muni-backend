@@ -2,15 +2,15 @@ services:
   postgres:
     image: ${POSTGRES_IMAGE:-postgres:17-alpine}
     environment:
-      POSTGRES_USER: ${DB_USER:-moni}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-moni}
-      POSTGRES_DB: ${DB_NAME:-moni}
+      POSTGRES_USER: ${DB_USER:-muni}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-muni}
+      POSTGRES_DB: ${DB_NAME:-muni}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-moni} -d ${DB_NAME:-moni}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-muni} -d ${DB_NAME:-muni}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -20,15 +20,15 @@ services:
     image: ${POSTGRES_IMAGE:-postgres:17-alpine}
     profiles: ["test"]
     environment:
-      POSTGRES_USER: moni_test
-      POSTGRES_PASSWORD: moni_test
-      POSTGRES_DB: moni_test
+      POSTGRES_USER: muni_test
+      POSTGRES_PASSWORD: muni_test
+      POSTGRES_DB: muni_test
     ports:
       - "127.0.0.1:${TEST_DB_PORT:-55432}:5432"
     tmpfs:
       - /var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U moni_test -d moni_test"]
+      test: ["CMD-SHELL", "pg_isready -U muni_test -d muni_test"]
       interval: 2s
       timeout: 3s
       retries: 20
@@ -42,7 +42,7 @@ services:
       - ./db/migrations:/migrations:ro
     command:
       - -path=/migrations
-      - -database=postgres://${DB_USER:-moni}:${DB_PASSWORD:-moni}@postgres:5432/${DB_NAME:-moni}?sslmode=disable
+      - -database=postgres://${DB_USER:-muni}:${DB_PASSWORD:-muni}@postgres:5432/${DB_NAME:-muni}?sslmode=disable
       - up
 
   app:
@@ -56,9 +56,9 @@ services:
       APP_PORT: 8080
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: ${DB_USER:-moni}
-      DB_PASSWORD: ${DB_PASSWORD:-moni}
-      DB_NAME: ${DB_NAME:-moni}
+      DB_USER: ${DB_USER:-muni}
+      DB_PASSWORD: ${DB_PASSWORD:-muni}
+      DB_NAME: ${DB_NAME:-muni}
       DB_SSLMODE: disable
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       JWT_TTL: ${JWT_TTL:-24h}

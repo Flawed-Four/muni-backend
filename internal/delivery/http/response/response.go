@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Flawed-Four/moni-be/internal/domain"
+	"github.com/Flawed-Four/muni-backend/internal/domain"
 )
 
 type Success struct {

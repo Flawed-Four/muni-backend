@@ -21,9 +21,9 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/Flawed-Four/moni-be/internal/config"
-	"github.com/Flawed-Four/moni-be/internal/di"
-	"github.com/Flawed-Four/moni-be/internal/infrastructure/database"
+	"github.com/Flawed-Four/muni-backend/internal/config"
+	"github.com/Flawed-Four/muni-backend/internal/di"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/database"
 )
 
 var (
@@ -76,9 +76,9 @@ func loadTestConfig() *config.Config {
 		DB: config.DBConfig{
 			Host:     getenv("TEST_DB_HOST", "localhost"),
 			Port:     port,
-			User:     "moni_test",
-			Password: "moni_test",
-			Name:     "moni_test",
+			User:     "muni_test",
+			Password: "muni_test",
+			Name:     "muni_test",
 			SSLMode:  "disable",
 		},
 		JWT: config.JWTConfig{Secret: "integration-test-secret", TTL: time.Hour},

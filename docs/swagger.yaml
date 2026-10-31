@@ -80,8 +80,8 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Moni backend service.
-  title: Moni API
+  description: Muni backend service.
+  title: Muni API
   version: "1.0"
 paths:
   /auth/login:

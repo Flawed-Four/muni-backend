@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/Flawed-Four/moni-be/internal/config"
+	"github.com/Flawed-Four/muni-backend/internal/config"
 )
 
 // NewPgxPool opens a connection pool and verifies connectivity.

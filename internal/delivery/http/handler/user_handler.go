@@ -5,10 +5,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Flawed-Four/moni-be/internal/delivery/http/dto"
-	"github.com/Flawed-Four/moni-be/internal/delivery/http/middleware"
-	"github.com/Flawed-Four/moni-be/internal/delivery/http/response"
-	"github.com/Flawed-Four/moni-be/internal/usecase"
+	"github.com/Flawed-Four/muni-backend/internal/delivery/http/dto"
+	"github.com/Flawed-Four/muni-backend/internal/delivery/http/middleware"
+	"github.com/Flawed-Four/muni-backend/internal/delivery/http/response"
+	"github.com/Flawed-Four/muni-backend/internal/usecase"
 )
 
 type UserHandler struct {

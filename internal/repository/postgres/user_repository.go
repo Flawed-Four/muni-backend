@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/Flawed-Four/moni-be/internal/domain"
-	"github.com/Flawed-Four/moni-be/internal/infrastructure/database/sqlc"
+	"github.com/Flawed-Four/muni-backend/internal/domain"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/database/sqlc"
 )
 
 type UserRepository struct {

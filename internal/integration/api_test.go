@@ -10,9 +10,9 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/Flawed-Four/moni-be/internal/delivery/http/dto"
-	"github.com/Flawed-Four/moni-be/internal/delivery/http/response"
-	"github.com/Flawed-Four/moni-be/internal/infrastructure/security"
+	"github.com/Flawed-Four/muni-backend/internal/delivery/http/dto"
+	"github.com/Flawed-Four/muni-backend/internal/delivery/http/response"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/security"
 )
 
 func do(t *testing.T, method, path string, body any, token string) *httptest.ResponseRecorder {

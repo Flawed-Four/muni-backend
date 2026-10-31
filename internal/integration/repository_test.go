@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Flawed-Four/moni-be/internal/domain"
-	"github.com/Flawed-Four/moni-be/internal/repository/postgres"
+	"github.com/Flawed-Four/muni-backend/internal/domain"
+	"github.com/Flawed-Four/muni-backend/internal/repository/postgres"
 )
 
 func newUser(email string) *domain.User {

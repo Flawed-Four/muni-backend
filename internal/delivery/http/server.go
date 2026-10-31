@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Flawed-Four/moni-be/internal/config"
+	"github.com/Flawed-Four/muni-backend/internal/config"
 )
 
 func NewServer(cfg *config.Config, router *gin.Engine) *http.Server {

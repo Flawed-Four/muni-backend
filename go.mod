@@ -1,4 +1,4 @@
-module github.com/Flawed-Four/moni-be
+module github.com/Flawed-Four/muni-backend
 
 go 1.27.1
 

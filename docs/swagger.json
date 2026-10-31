@@ -1,8 +1,8 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Moni backend service.",
-        "title": "Moni API",
+        "description": "Muni backend service.",
+        "title": "Muni API",
         "contact": {},
         "version": "1.0"
     },

@@ -1,6 +1,6 @@
-// @title						Moni API
+// @title						Muni API
 // @version					1.0
-// @description				Moni backend service.
+// @description				Muni backend service.
 // @BasePath					/api/v1
 // @securityDefinitions.apikey	BearerAuth
 // @in							header
@@ -18,8 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Flawed-Four/moni-be/internal/config"
-	"github.com/Flawed-Four/moni-be/internal/di"
+	"github.com/Flawed-Four/muni-backend/internal/config"
+	"github.com/Flawed-Four/muni-backend/internal/di"
 )
 
 func main() {

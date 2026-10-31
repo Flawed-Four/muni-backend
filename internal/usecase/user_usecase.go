@@ -3,7 +3,7 @@ package usecase
 import (
 	"context"
 
-	"github.com/Flawed-Four/moni-be/internal/domain"
+	"github.com/Flawed-Four/muni-backend/internal/domain"
 )
 
 type UserUsecase struct {

@@ -3,7 +3,7 @@ package dto
 import (
 	"time"
 
-	"github.com/Flawed-Four/moni-be/internal/domain"
+	"github.com/Flawed-Four/muni-backend/internal/domain"
 )
 
 type RegisterRequest struct {
