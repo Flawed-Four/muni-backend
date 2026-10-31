@@ -19,8 +19,8 @@ import (
 var infraSet = wire.NewSet(
 	database.NewPgxPool,
 	wire.Bind(new(handler.Pinger), new(*pgxpool.Pool)),
-	security.NewJWTService,
-	wire.Bind(new(domain.TokenService), new(*security.JWTService)),
+	security.NewSessionTokens,
+	wire.Bind(new(domain.TokenService), new(*security.SessionTokens)),
 	security.NewBcryptHasher,
 	wire.Bind(new(domain.PasswordHasher), new(*security.BcryptHasher)),
 )
@@ -28,9 +28,12 @@ var infraSet = wire.NewSet(
 var repoSet = wire.NewSet(
 	postgres.NewUserRepository,
 	wire.Bind(new(domain.UserRepository), new(*postgres.UserRepository)),
+	postgres.NewSessionRepository,
+	wire.Bind(new(domain.SessionRepository), new(*postgres.SessionRepository)),
 )
 
 var usecaseSet = wire.NewSet(
+	ProvideSessionTTL,
 	usecase.NewAuthUsecase,
 	usecase.NewUserUsecase,
 )

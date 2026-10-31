@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -181,20 +182,113 @@ func TestMeRequiresValidToken(t *testing.T) {
 	t.Run("garbage token", func(t *testing.T) {
 		wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, "abc"), http.StatusUnauthorized)
 	})
-	t.Run("token signed with another secret", func(t *testing.T) {
-		other := *testCfg
-		other.JWT.Secret = "a-different-secret"
-		tok, err := security.NewJWTService(&other).Generate("00000000-0000-0000-0000-000000000000")
+	t.Run("well-formed token that was never issued", func(t *testing.T) {
+		tok, _, err := security.NewSessionTokens().New()
 		if err != nil {
 			t.Fatal(err)
 		}
 		wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, tok), http.StatusUnauthorized)
 	})
-	t.Run("valid token for a user that no longer exists", func(t *testing.T) {
-		tok, err := security.NewJWTService(testCfg).Generate("00000000-0000-0000-0000-000000000000")
-		if err != nil {
-			t.Fatal(err)
-		}
-		wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, tok), http.StatusNotFound)
-	})
+}
+
+func TestLoginStoresOnlyTokenHash(t *testing.T) {
+	resetDB(t)
+	user := register(t, "Harun", "harun@example.com", "s3cretpass")
+	token := login(t, "harun@example.com", "s3cretpass")
+
+	var userID string
+	var hash []byte
+	err := testPool.QueryRow(context.Background(),
+		"SELECT user_id, token_hash FROM sessions").Scan(&userID, &hash)
+	if err != nil {
+		t.Fatalf("query session: %v", err)
+	}
+	if userID != user.ID {
+		t.Fatalf("session user_id = %s, want %s", userID, user.ID)
+	}
+	if string(hash) == token || !bytes.Equal(hash, security.NewSessionTokens().Hash(token)) {
+		t.Fatal("sessions.token_hash must be the SHA-256 of the token, not the token")
+	}
+}
+
+func TestLogoutRevokesOnlyCurrentSession(t *testing.T) {
+	resetDB(t)
+	register(t, "Harun", "harun@example.com", "s3cretpass")
+	first := login(t, "harun@example.com", "s3cretpass")
+	second := login(t, "harun@example.com", "s3cretpass")
+
+	wantStatus(t, do(t, http.MethodPost, "/api/v1/auth/logout", nil, first), http.StatusNoContent)
+
+	wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, first), http.StatusUnauthorized)
+	wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, second), http.StatusOK)
+
+	// A revoked token cannot log out again.
+	wantStatus(t, do(t, http.MethodPost, "/api/v1/auth/logout", nil, first), http.StatusUnauthorized)
+}
+
+func TestLogoutAllRevokesEveryUserSession(t *testing.T) {
+	resetDB(t)
+	register(t, "Harun", "harun@example.com", "s3cretpass")
+	register(t, "Other", "other@example.com", "s3cretpass")
+	a := login(t, "harun@example.com", "s3cretpass")
+	b := login(t, "harun@example.com", "s3cretpass")
+	other := login(t, "other@example.com", "s3cretpass")
+
+	wantStatus(t, do(t, http.MethodPost, "/api/v1/auth/logout-all", nil, a), http.StatusNoContent)
+
+	wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, a), http.StatusUnauthorized)
+	wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, b), http.StatusUnauthorized)
+	wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, other), http.StatusOK)
+}
+
+func TestExpiredSessionIsRejected(t *testing.T) {
+	resetDB(t)
+	register(t, "Harun", "harun@example.com", "s3cretpass")
+	token := login(t, "harun@example.com", "s3cretpass")
+
+	if _, err := testPool.Exec(context.Background(),
+		"UPDATE sessions SET expires_at = now() - interval '1 second'"); err != nil {
+		t.Fatalf("expire session: %v", err)
+	}
+	wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, token), http.StatusUnauthorized)
+}
+
+func TestSessionRecordsClientAndExpiry(t *testing.T) {
+	resetDB(t)
+	register(t, "Harun", "harun@example.com", "s3cretpass")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+		bytes.NewBufferString(`{"email":"harun@example.com","password":"s3cretpass"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "muni-test/1.0")
+	req.RemoteAddr = "203.0.113.7:4321"
+	rec := httptest.NewRecorder()
+	testHandler.ServeHTTP(rec, req)
+	wantStatus(t, rec, http.StatusOK)
+
+	tok := data[dto.TokenResponse](t, rec)
+	if d := time.Until(tok.ExpiresAt); d <= 0 || d > testCfg.Session.TTL {
+		t.Fatalf("expires_at = %v, want within (0, %v] from now", tok.ExpiresAt, testCfg.Session.TTL)
+	}
+
+	var ua, ip string
+	err := testPool.QueryRow(context.Background(),
+		"SELECT user_agent, host(ip_address) FROM sessions").Scan(&ua, &ip)
+	if err != nil {
+		t.Fatalf("query session: %v", err)
+	}
+	if ua != "muni-test/1.0" || ip != "203.0.113.7" {
+		t.Fatalf("user_agent=%q ip=%q", ua, ip)
+	}
+}
+
+func TestDeletingUserCascadesSessions(t *testing.T) {
+	resetDB(t)
+	register(t, "Harun", "harun@example.com", "s3cretpass")
+	token := login(t, "harun@example.com", "s3cretpass")
+
+	if _, err := testPool.Exec(context.Background(), "DELETE FROM users"); err != nil {
+		t.Fatalf("delete users: %v", err)
+	}
+	wantStatus(t, do(t, http.MethodGet, "/api/v1/users/me", nil, token), http.StatusUnauthorized)
 }

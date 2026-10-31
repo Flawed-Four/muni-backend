@@ -22,19 +22,21 @@ import (
 // Injectors from wire.go:
 
 func InitializeApp(cfg *config.Config) (*App, func(), error) {
-	jwtService := security.NewJWTService(cfg)
 	pool, cleanup, err := database.NewPgxPool(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	healthHandler := handler.NewHealthHandler(pool)
 	userRepository := postgres.NewUserRepository(pool)
+	sessionRepository := postgres.NewSessionRepository(pool)
 	bcryptHasher := security.NewBcryptHasher()
-	authUsecase := usecase.NewAuthUsecase(userRepository, bcryptHasher, jwtService)
+	sessionTokens := security.NewSessionTokens()
+	sessionTTL := ProvideSessionTTL(cfg)
+	authUsecase := usecase.NewAuthUsecase(userRepository, sessionRepository, bcryptHasher, sessionTokens, sessionTTL)
+	healthHandler := handler.NewHealthHandler(pool)
 	authHandler := handler.NewAuthHandler(authUsecase)
 	userUsecase := usecase.NewUserUsecase(userRepository)
 	userHandler := handler.NewUserHandler(userUsecase)
-	engine := http.NewRouter(jwtService, healthHandler, authHandler, userHandler)
+	engine := http.NewRouter(authUsecase, healthHandler, authHandler, userHandler)
 	server := http.NewServer(cfg, engine)
 	app := &App{
 		Server: server,
@@ -46,11 +48,13 @@ func InitializeApp(cfg *config.Config) (*App, func(), error) {
 
 // wire.go:
 
-var infraSet = wire.NewSet(database.NewPgxPool, wire.Bind(new(handler.Pinger), new(*pgxpool.Pool)), security.NewJWTService, wire.Bind(new(domain.TokenService), new(*security.JWTService)), security.NewBcryptHasher, wire.Bind(new(domain.PasswordHasher), new(*security.BcryptHasher)))
+var infraSet = wire.NewSet(database.NewPgxPool, wire.Bind(new(handler.Pinger), new(*pgxpool.Pool)), security.NewSessionTokens, wire.Bind(new(domain.TokenService), new(*security.SessionTokens)), security.NewBcryptHasher, wire.Bind(new(domain.PasswordHasher), new(*security.BcryptHasher)))
 
-var repoSet = wire.NewSet(postgres.NewUserRepository, wire.Bind(new(domain.UserRepository), new(*postgres.UserRepository)))
+var repoSet = wire.NewSet(postgres.NewUserRepository, wire.Bind(new(domain.UserRepository), new(*postgres.UserRepository)), postgres.NewSessionRepository, wire.Bind(new(domain.SessionRepository), new(*postgres.SessionRepository)))
 
-var usecaseSet = wire.NewSet(usecase.NewAuthUsecase, usecase.NewUserUsecase)
+var usecaseSet = wire.NewSet(
+	ProvideSessionTTL, usecase.NewAuthUsecase, usecase.NewUserUsecase,
+)
 
 var handlerSet = wire.NewSet(handler.NewHealthHandler, handler.NewAuthHandler, handler.NewUserHandler)
 

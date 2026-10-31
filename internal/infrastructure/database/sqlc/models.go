@@ -5,8 +5,22 @@
 package sqlc
 
 import (
+	"net/netip"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type Session struct {
+	ID         string
+	UserID     string
+	TokenHash  []byte
+	UserAgent  string
+	IpAddress  *netip.Addr
+	ExpiresAt  pgtype.Timestamptz
+	RevokedAt  pgtype.Timestamptz
+	LastUsedAt pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+}
 
 type User struct {
 	ID           string

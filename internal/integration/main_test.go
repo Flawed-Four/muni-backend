@@ -81,7 +81,7 @@ func loadTestConfig() *config.Config {
 			Name:     "muni_test",
 			SSLMode:  "disable",
 		},
-		JWT: config.JWTConfig{Secret: "integration-test-secret", TTL: time.Hour},
+		Session: config.SessionConfig{TTL: time.Hour},
 	}
 }
 
@@ -115,7 +115,7 @@ func getenv(key, fallback string) string {
 // resetDB empties all tables so every test starts from a clean state.
 func resetDB(t *testing.T) {
 	t.Helper()
-	if _, err := testPool.Exec(context.Background(), "TRUNCATE users"); err != nil {
-		t.Fatalf("truncate users: %v", err)
+	if _, err := testPool.Exec(context.Background(), "TRUNCATE users, sessions CASCADE"); err != nil {
+		t.Fatalf("truncate tables: %v", err)
 	}
 }

@@ -18,8 +18,9 @@ type LoginRequest struct {
 }
 
 type TokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type" example:"Bearer"`
+	AccessToken string    `json:"access_token"`
+	TokenType   string    `json:"token_type" example:"Bearer"`
+	ExpiresAt   time.Time `json:"expires_at"`
 }
 
 type UserResponse struct {

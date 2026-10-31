@@ -48,6 +48,8 @@ definitions:
     properties:
       access_token:
         type: string
+      expires_at:
+        type: string
       token_type:
         example: Bearer
         type: string
@@ -110,7 +112,35 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/response.Error'
-      summary: Log in and obtain an access token
+      summary: Log in and obtain a session token
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - BearerAuth: []
+      summary: Revoke the current session
+      tags:
+      - auth
+  /auth/logout-all:
+    post:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - BearerAuth: []
+      summary: Revoke all sessions of the authenticated user
       tags:
       - auth
   /auth/register:
@@ -182,7 +212,8 @@ paths:
       - users
 securityDefinitions:
   BearerAuth:
-    description: Type "Bearer" followed by a space and the JWT.
+    description: Type "Bearer" followed by a space and the session token returned
+      by /auth/login.
     in: header
     name: Authorization
     type: apiKey

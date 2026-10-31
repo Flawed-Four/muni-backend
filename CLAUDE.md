@@ -25,10 +25,10 @@ Clean architecture; dependencies point inward:
 ```
 delivery/http ──► usecase ──► domain ◄── repository/postgres
                                  ▲
-                                 └── infrastructure (jwt, bcrypt, pgx pool)
+                                 └── infrastructure (session tokens, bcrypt, pgx pool)
 ```
 
-- `internal/domain` holds entities, the interfaces (`UserRepository`, `TokenService`, `PasswordHasher`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
+- `internal/domain` holds entities, the interfaces (`UserRepository`, `SessionRepository`, `TokenService`, `PasswordHasher`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
 - Errors flow upward as domain sentinels (`ErrNotFound`, `ErrEmailTaken`, `ErrInvalidCredentials`, `ErrInvalidToken`). Repositories translate DB errors into them (unique violation → `ErrEmailTaken`; no rows and malformed UUID → `ErrNotFound`). Match Postgres error codes with `errors.As(err, &*pgconn.PgError)` and the constants from `github.com/jackc/pgerrcode` (e.g. `pgerrcode.UniqueViolation`) — never string literals like `"23505"` or new local constants. `delivery/http/response.Fail` is the single place mapping them to HTTP status; unknown errors become a logged 500.
 - Handlers wrap payloads as `{"data": ...}` / `{"error": {"message": ...}}`.
 - `internal/di/wire.go` (build tag `wireinject`) defines provider sets per layer; `wire_gen.go` is the generated result. `App` (in `app.go`) holds the `*http.Server`. A new interface binding needs a `wire.Bind` in the same set as the concrete provider (e.g. `handler.Pinger` ← `*pgxpool.Pool` is bound in `infraSet`), otherwise Wire fails.
@@ -62,5 +62,7 @@ delivery/http ──► usecase ──► domain ◄── repository/postgres
 All tests are integration tests in `internal/integration` against a real PostgreSQL (compose service `postgres-test`, profile `test`) — **no mocks**; keep it that way. `TestMain` applies the real migrations with golang-migrate, then builds the HTTP handler via `di.InitializeApp`, i.e. the production Wire graph. Tests call `resetDB(t)` (TRUNCATE) first and run sequentially because they share one DB, so don't add `t.Parallel()` or a second package that uses the same DB. If the DB is down the suite fails (it does not skip). Override with `TEST_DB_PORT` / `POSTGRES_IMAGE`.
 
 ## Gotchas
+
+- Auth is stateful: `login` inserts a row in `sessions` and returns an opaque random token; only its SHA-256 is stored. The `Auth` middleware calls `AuthUsecase.Authenticate`, which hits the DB on every request (and bumps `last_used_at`). Unknown, revoked and expired sessions all surface as `ErrInvalidToken`.
 
 - Login returns the same `ErrInvalidCredentials` for unknown email and wrong password (no user enumeration); tests assert this.

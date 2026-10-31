@@ -60,8 +60,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-muni}
       DB_NAME: ${DB_NAME:-muni}
       DB_SSLMODE: disable
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      JWT_TTL: ${JWT_TTL:-24h}
+      SESSION_TTL: ${SESSION_TTL:-24h}
     ports:
       - "${APP_PORT:-8080}:8080"
 

@@ -26,7 +26,7 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "Log in and obtain an access token",
+                "summary": "Log in and obtain a session token",
                 "parameters": [
                     {
                         "description": "Login payload",
@@ -50,6 +50,54 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.Error"
                         }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Revoke the current session",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout-all": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Revoke all sessions of the authenticated user",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -235,6 +283,9 @@ const docTemplate = `{
                 "access_token": {
                     "type": "string"
                 },
+                "expires_at": {
+                    "type": "string"
+                },
                 "token_type": {
                     "type": "string",
                     "example": "Bearer"
@@ -285,7 +336,7 @@ const docTemplate = `{
     },
     "securityDefinitions": {
         "BearerAuth": {
-            "description": "Type \"Bearer\" followed by a space and the JWT.",
+            "description": "Type \"Bearer\" followed by a space and the session token returned by /auth/login.",
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

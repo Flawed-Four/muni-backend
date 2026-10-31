@@ -8,11 +8,11 @@ import (
 	_ "github.com/Flawed-Four/muni-backend/docs"
 	"github.com/Flawed-Four/muni-backend/internal/delivery/http/handler"
 	"github.com/Flawed-Four/muni-backend/internal/delivery/http/middleware"
-	"github.com/Flawed-Four/muni-backend/internal/domain"
+	"github.com/Flawed-Four/muni-backend/internal/usecase"
 )
 
 func NewRouter(
-	tokens domain.TokenService,
+	authUC *usecase.AuthUsecase,
 	health *handler.HealthHandler,
 	auth *handler.AuthHandler,
 	user *handler.UserHandler,
@@ -28,7 +28,9 @@ func NewRouter(
 		v1.POST("/auth/register", auth.Register)
 		v1.POST("/auth/login", auth.Login)
 
-		protected := v1.Group("", middleware.Auth(tokens))
+		protected := v1.Group("", middleware.Auth(authUC))
+		protected.POST("/auth/logout", auth.Logout)
+		protected.POST("/auth/logout-all", auth.LogoutAll)
 		protected.GET("/users/me", user.Me)
 	}
 

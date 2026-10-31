@@ -1,10 +1,12 @@
 package domain
 
-// TokenService issues and verifies access tokens.
+// TokenService generates opaque session tokens and hashes them for storage.
+// Only the hash is ever persisted; the raw token is handed to the client once.
 type TokenService interface {
-	Generate(userID string) (token string, err error)
-	// Verify returns the user ID embedded in the token, or ErrInvalidToken.
-	Verify(token string) (userID string, err error)
+	// New returns a fresh random token and the hash to store for it.
+	New() (token string, hash []byte, err error)
+	// Hash returns the storage hash for a token presented by a client.
+	Hash(token string) []byte
 }
 
 // PasswordHasher hashes passwords and compares them with stored hashes.

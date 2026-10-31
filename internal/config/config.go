@@ -9,9 +9,9 @@ import (
 )
 
 type Config struct {
-	App AppConfig
-	DB  DBConfig
-	JWT JWTConfig
+	App     AppConfig
+	DB      DBConfig
+	Session SessionConfig
 }
 
 type AppConfig struct {
@@ -28,9 +28,8 @@ type DBConfig struct {
 	SSLMode  string `env:"DB_SSLMODE" envDefault:"disable"`
 }
 
-type JWTConfig struct {
-	Secret string        `env:"JWT_SECRET,required"`
-	TTL    time.Duration `env:"JWT_TTL" envDefault:"24h"`
+type SessionConfig struct {
+	TTL time.Duration `env:"SESSION_TTL" envDefault:"24h"`
 }
 
 // DSN returns the PostgreSQL connection string.

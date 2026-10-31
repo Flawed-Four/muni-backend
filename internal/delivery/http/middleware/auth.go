@@ -7,13 +7,16 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Flawed-Four/muni-backend/internal/delivery/http/response"
-	"github.com/Flawed-Four/muni-backend/internal/domain"
+	"github.com/Flawed-Four/muni-backend/internal/usecase"
 )
 
-const userIDKey = "user_id"
+const (
+	userIDKey = "user_id"
+	tokenKey  = "session_token"
+)
 
-// Auth validates the Bearer token and stores the user ID in the Gin context.
-func Auth(tokens domain.TokenService) gin.HandlerFunc {
+// Auth validates the Bearer session token and stores the user ID and token in the Gin context.
+func Auth(auth *usecase.AuthUsecase) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		scheme, token, ok := strings.Cut(c.GetHeader("Authorization"), " ")
 		if !ok || !strings.EqualFold(scheme, "Bearer") || token == "" {
@@ -21,13 +24,15 @@ func Auth(tokens domain.TokenService) gin.HandlerFunc {
 			return
 		}
 
-		userID, err := tokens.Verify(strings.TrimSpace(token))
+		token = strings.TrimSpace(token)
+		userID, err := auth.Authenticate(c.Request.Context(), token)
 		if err != nil {
-			response.Abort(c, http.StatusUnauthorized, domain.ErrInvalidToken.Error())
+			response.Fail(c, err)
 			return
 		}
 
 		c.Set(userIDKey, userID)
+		c.Set(tokenKey, token)
 		c.Next()
 	}
 }
@@ -35,4 +40,9 @@ func Auth(tokens domain.TokenService) gin.HandlerFunc {
 // UserID returns the authenticated user's ID set by Auth.
 func UserID(c *gin.Context) string {
 	return c.GetString(userIDKey)
+}
+
+// Token returns the raw session token of the current request, set by Auth.
+func Token(c *gin.Context) string {
+	return c.GetString(tokenKey)
 }
