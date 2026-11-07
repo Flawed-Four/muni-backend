@@ -1,6 +1,7 @@
-// Package integration runs the application against a real PostgreSQL instance
-// (the postgres-test service in docker-compose.yml). Nothing is mocked: the
-// HTTP stack is built through the same Wire graph used in production.
+// Package integration runs the application against a real PostgreSQL, Mailpit
+// and Redis (the postgres-test, mailpit-test and redis-test services in
+// docker-compose.yml). Nothing is mocked: the HTTP stack is built through the
+// same Wire graph used in production.
 package integration
 
 import (
@@ -20,15 +21,18 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/Flawed-Four/muni-backend/internal/config"
 	"github.com/Flawed-Four/muni-backend/internal/di"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/database"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/kvstore"
 )
 
 var (
 	testCfg     *config.Config
 	testPool    *pgxpool.Pool
+	testRedis   *redis.Client
 	testHandler http.Handler
 	mailpitURL  string
 )
@@ -56,6 +60,15 @@ func run(m *testing.M) int {
 	defer closePool()
 	testPool = pool
 
+	redisClient, closeRedis, err := kvstore.NewRedisClient(testCfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "integration: %v\n"+
+			"Is it running? Start it with `make test-db-up`, or run everything with `make test`.\n", err)
+		return 1
+	}
+	defer closeRedis()
+	testRedis = redisClient
+
 	app, cleanup, err := di.InitializeApp(testCfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "integration: build app: %v\n", err)
@@ -67,7 +80,7 @@ func run(m *testing.M) int {
 	return m.Run()
 }
 
-// loadTestConfig defaults match the postgres-test and mailpit-test services in docker-compose.yml.
+// loadTestConfig defaults match the postgres-test, mailpit-test and redis-test services in docker-compose.yml.
 func loadTestConfig() *config.Config {
 	return &config.Config{
 		App: config.AppConfig{Env: "test", Port: 0},
@@ -87,6 +100,11 @@ func loadTestConfig() *config.Config {
 			FromName:    "Muni Test",
 			TLSMode:     "none",
 			Timeout:     5 * time.Second,
+		},
+		Redis: config.RedisConfig{
+			Host:    getenv("TEST_REDIS_HOST", "localhost"),
+			Port:    getenvInt("TEST_REDIS_PORT", 56379),
+			Timeout: time.Second,
 		},
 	}
 }
@@ -131,5 +149,13 @@ func resetDB(t *testing.T) {
 	t.Helper()
 	if _, err := testPool.Exec(context.Background(), "TRUNCATE users, sessions, notes, note_tags CASCADE"); err != nil {
 		t.Fatalf("truncate tables: %v", err)
+	}
+}
+
+// resetRedis empties the test Redis so every test starts from a clean state.
+func resetRedis(t *testing.T) {
+	t.Helper()
+	if err := testRedis.FlushDB(context.Background()).Err(); err != nil {
+		t.Fatalf("flush redis: %v", err)
 	}
 }

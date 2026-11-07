@@ -53,6 +53,30 @@ services:
       timeout: 3s
       retries: 20
 
+  # Local Redis without a password, so it must stay bound to loopback.
+  redis:
+    image: ${REDIS_IMAGE:-redis:8-alpine}
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Disposable Redis for automated tests (see `make test`). Nothing is written to disk.
+  redis-test:
+    image: ${REDIS_IMAGE:-redis:8-alpine}
+    profiles: ["test"]
+    command: ["redis-server", "--save", ""]
+    ports:
+      - "127.0.0.1:${TEST_REDIS_PORT:-56379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
   migrate:
     image: migrate/migrate:v4.20.1
     depends_on:
@@ -71,6 +95,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_PORT: 8080
@@ -86,6 +112,8 @@ services:
       SMTP_TLS_MODE: none
       SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-noreply@muni.local}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Muni}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
       - "${APP_PORT:-8080}:8080"
 

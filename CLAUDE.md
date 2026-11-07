@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 make run                      # go run ./cmd/api (reads .env; copy from .env.example first)
-make docker-up                # dev Postgres + migrations + Mailpit via compose (docker-down to stop)
-make test                     # starts postgres-test + mailpit-test, runs ALL tests, always tears them down
-make test-db-up               # start only the test services (Postgres 55432, Mailpit SMTP 51025 / API 58025)
+make docker-up                # dev Postgres + migrations + Mailpit + Redis via compose (docker-down to stop)
+make test                     # starts postgres-test + mailpit-test + redis-test, runs ALL tests, always tears them down
+make test-db-up               # start only the test services (Postgres 55432, Mailpit SMTP 51025 / API 58025, Redis 56379)
 make test-run                 # go test ./... against already-running test services
 go test -count=1 ./internal/integration -run TestRegisterLoginMe   # single test (test services must be up)
 make lint                     # go vet ./...
@@ -25,10 +25,10 @@ Clean architecture; dependencies point inward:
 ```
 delivery/http ──► usecase ──► domain ◄── repository/postgres
                                  ▲
-                                 └── infrastructure (session tokens, bcrypt, pgx pool, SMTP)
+                                 └── infrastructure (session tokens, bcrypt, pgx pool, SMTP, Redis)
 ```
 
-- `internal/domain` holds entities, the interfaces (`UserRepository`, `SessionRepository`, `TokenService`, `PasswordHasher`, `EmailSender`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
+- `internal/domain` holds entities, the interfaces (`UserRepository`, `SessionRepository`, `TokenService`, `PasswordHasher`, `EmailSender`, `KeyValueStore`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
 - Errors flow upward as domain sentinels (`ErrNotFound`, `ErrEmailTaken`, `ErrInvalidCredentials`, `ErrInvalidToken`). Repositories translate DB errors into them (unique violation → `ErrEmailTaken`; no rows and malformed UUID → `ErrNotFound`). Match Postgres error codes with `errors.As(err, &*pgconn.PgError)` and the constants from `github.com/jackc/pgerrcode` (e.g. `pgerrcode.UniqueViolation`) — never string literals like `"23505"` or new local constants. `delivery/http/response.Fail` is the single place mapping them to HTTP status; unknown errors become a logged 500.
 - Handlers wrap payloads as `{"data": ...}` / `{"error": {"message": ...}}`.
 - `internal/di/wire.go` (build tag `wireinject`) defines provider sets per layer; `wire_gen.go` is the generated result. `App` (in `app.go`) holds the `*http.Server`. A new interface binding needs a `wire.Bind` in the same set as the concrete provider (e.g. `handler.Pinger` ← `*pgxpool.Pool` is bound in `infraSet`), otherwise Wire fails.
@@ -59,9 +59,9 @@ delivery/http ──► usecase ──► domain ◄── repository/postgres
 
 ## Testing
 
-All tests are integration tests in `internal/integration` against a real PostgreSQL and a real Mailpit (compose services `postgres-test` and `mailpit-test`, profile `test`) — **no mocks**; keep it that way. `TestMain` applies the real migrations with golang-migrate, then builds the HTTP handler via `di.InitializeApp`, i.e. the production Wire graph. Tests call `resetDB(t)` (TRUNCATE) first, and email tests call `resetMail(t)` and read the result through Mailpit's REST API. They run sequentially because they share one DB and one inbox, so don't add `t.Parallel()` or a second package that uses them. If either service is down the suite fails (it does not skip). Override with `TEST_DB_PORT` / `TEST_SMTP_PORT` / `TEST_MAILPIT_PORT` / `POSTGRES_IMAGE`.
+All tests are integration tests in `internal/integration` against a real PostgreSQL, a real Mailpit and a real Redis (compose services `postgres-test`, `mailpit-test` and `redis-test`, profile `test`) — **no mocks**; keep it that way. `TestMain` applies the real migrations with golang-migrate, then builds the HTTP handler via `di.InitializeApp`, i.e. the production Wire graph. Tests call `resetDB(t)` (TRUNCATE) first, email tests call `resetMail(t)` and read the result through Mailpit's REST API, and Redis tests call `resetRedis(t)` (FLUSHDB). They run sequentially because they share one DB, one inbox and one Redis, so don't add `t.Parallel()` or a second package that uses them. If any service is down the suite fails (it does not skip). Override with `TEST_DB_PORT` / `TEST_SMTP_PORT` / `TEST_MAILPIT_PORT` / `TEST_REDIS_PORT` / `POSTGRES_IMAGE` / `REDIS_IMAGE`.
 
-Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `SMTPSender` are not covered there beyond checking that `starttls` refuses to fall back to plaintext.
+Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `SMTPSender` are not covered there beyond checking that `starttls` refuses to fall back to plaintext. The same goes for `redis-test` and `NewRedisClient`: only the refusal to fall back from TLS is covered.
 
 ## Gotchas
 
@@ -72,3 +72,9 @@ Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `
 - `domain.EmailSender` is bound in `infraSet`, but nothing consumes it yet, so Wire leaves `NewSMTPSender` out of `InitializeApp` and its config validation does not run at startup. Once a usecase takes `domain.EmailSender`, an invalid `SMTP_FROM_ADDRESS` or `SMTP_TLS_MODE` stops the app from booting.
 
 - `EmailSender.Send` is synchronous and opens a new connection per call, so calling it from a request path adds the SMTP round trip to the response time.
+
+- `domain.KeyValueStore` is likewise bound in `infraSet` with no consumer yet, so Wire leaves `NewRedisClient` out of `InitializeApp` and the app neither connects to Redis nor needs it. Once a usecase takes `domain.KeyValueStore` (or anything takes `*redis.Client`), the app pings Redis at boot and refuses to start without it. `/health` does not check Redis.
+
+- `KeyValueStore` rejects a non-positive TTL because go-redis reads `0` as "never expire" and `-1` as "keep the current TTL". `Incr` has to stay a single transaction for the same reason: a counter left without a TTL would lock its subject out for good.
+
+- OTP codes and rate-limit counters share Redis with cache entries, so a production Redis with `maxmemory` must run `noeviction`. An evicting policy can drop them under memory pressure, which invalidates a pending code or resets a limit.

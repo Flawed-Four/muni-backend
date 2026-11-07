@@ -41,15 +41,15 @@ migrate-create:
 	@test -n "$(name)" || (echo "usage: make migrate-create name=<name>" && exit 1)
 	$(MIGRATE) create -ext sql -dir db/migrations -seq $(name)
 
-# Starts Postgres and Mailpit and applies migrations. Add --profile app to also run the API in a container.
+# Starts Postgres, Mailpit and Redis and applies migrations. Add --profile app to also run the API in a container.
 docker-up:
-	docker compose up -d postgres migrate mailpit
+	docker compose up -d postgres migrate mailpit redis
 
 docker-down:
 	docker compose down
 
-# Integration tests run against a real Postgres and Mailpit (compose services postgres-test
-# and mailpit-test), no mocks. `test` starts them, runs the suite, and always tears them down.
+# Integration tests run against a real Postgres, Mailpit and Redis (compose services postgres-test,
+# mailpit-test and redis-test), no mocks. `test` starts them, runs the suite, and always tears them down.
 test:
 	@$(MAKE) --no-print-directory test-db-up
 	@go test -count=1 ./... ; status=$$?; $(MAKE) --no-print-directory test-db-down; exit $$status
@@ -59,10 +59,10 @@ test-run:
 	go test -count=1 ./...
 
 test-db-up:
-	docker compose --profile test up -d --wait postgres-test mailpit-test
+	docker compose --profile test up -d --wait postgres-test mailpit-test redis-test
 
 test-db-down:
-	docker compose --profile test rm -sfv postgres-test mailpit-test
+	docker compose --profile test rm -sfv postgres-test mailpit-test redis-test
 
 lint:
 	go vet ./...

@@ -13,6 +13,7 @@ type Config struct {
 	DB      DBConfig
 	Session SessionConfig
 	SMTP    SMTPConfig
+	Redis   RedisConfig
 }
 
 type AppConfig struct {
@@ -44,6 +45,17 @@ type SMTPConfig struct {
 	FromName    string        `env:"SMTP_FROM_NAME" envDefault:"Muni"`
 	TLSMode     string        `env:"SMTP_TLS_MODE" envDefault:"starttls"` // starttls, tls or none
 	Timeout     time.Duration `env:"SMTP_TIMEOUT" envDefault:"10s"`
+}
+
+// RedisConfig describes the Redis server behind domain.KeyValueStore.
+type RedisConfig struct {
+	Host     string        `env:"REDIS_HOST" envDefault:"localhost"`
+	Port     int           `env:"REDIS_PORT" envDefault:"6379"`
+	Username string        `env:"REDIS_USERNAME"`
+	Password string        `env:"REDIS_PASSWORD"`
+	DB       int           `env:"REDIS_DB" envDefault:"0"`
+	TLS      bool          `env:"REDIS_TLS" envDefault:"false"`
+	Timeout  time.Duration `env:"REDIS_TIMEOUT" envDefault:"3s"` // per dial, read and write
 }
 
 // DSN returns the PostgreSQL connection string.
