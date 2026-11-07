@@ -33,6 +33,26 @@ services:
       timeout: 3s
       retries: 20
 
+  # Local mail catcher: accepts everything on 1025, delivers nothing. UI on 8025.
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
+  # Disposable mail catcher for automated tests (see `make test`).
+  mailpit-test:
+    image: axllent/mailpit:v1.33.0
+    profiles: ["test"]
+    ports:
+      - "127.0.0.1:${TEST_SMTP_PORT:-51025}:1025"
+      - "127.0.0.1:${TEST_MAILPIT_PORT:-58025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
   migrate:
     image: migrate/migrate:v4.20.1
     depends_on:
@@ -61,6 +81,11 @@ services:
       DB_NAME: ${DB_NAME:-muni}
       DB_SSLMODE: disable
       SESSION_TTL: ${SESSION_TTL:-24h}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_TLS_MODE: none
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-noreply@muni.local}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Muni}
     ports:
       - "${APP_PORT:-8080}:8080"
 

@@ -30,6 +30,7 @@ var (
 	testCfg     *config.Config
 	testPool    *pgxpool.Pool
 	testHandler http.Handler
+	mailpitURL  string
 )
 
 func TestMain(m *testing.M) {
@@ -39,6 +40,7 @@ func TestMain(m *testing.M) {
 func run(m *testing.M) int {
 	gin.SetMode(gin.TestMode)
 	testCfg = loadTestConfig()
+	mailpitURL = fmt.Sprintf("http://%s:%d", testCfg.SMTP.Host, getenvInt("TEST_MAILPIT_PORT", 58025))
 
 	if err := migrateUp(testCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "integration: cannot prepare test database: %v\n"+
@@ -65,23 +67,27 @@ func run(m *testing.M) int {
 	return m.Run()
 }
 
-// loadTestConfig defaults match the postgres-test service in docker-compose.yml.
+// loadTestConfig defaults match the postgres-test and mailpit-test services in docker-compose.yml.
 func loadTestConfig() *config.Config {
-	port, err := strconv.Atoi(getenv("TEST_DB_PORT", "55432"))
-	if err != nil {
-		port = 55432
-	}
 	return &config.Config{
 		App: config.AppConfig{Env: "test", Port: 0},
 		DB: config.DBConfig{
 			Host:     getenv("TEST_DB_HOST", "localhost"),
-			Port:     port,
+			Port:     getenvInt("TEST_DB_PORT", 55432),
 			User:     "muni_test",
 			Password: "muni_test",
 			Name:     "muni_test",
 			SSLMode:  "disable",
 		},
 		Session: config.SessionConfig{TTL: time.Hour},
+		SMTP: config.SMTPConfig{
+			Host:        getenv("TEST_SMTP_HOST", "localhost"),
+			Port:        getenvInt("TEST_SMTP_PORT", 51025),
+			FromAddress: "noreply@muni.test",
+			FromName:    "Muni Test",
+			TLSMode:     "none",
+			Timeout:     5 * time.Second,
+		},
 	}
 }
 
@@ -108,6 +114,13 @@ func migrateUp(cfg *config.Config) error {
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getenvInt(key string, fallback int) int {
+	if n, err := strconv.Atoi(os.Getenv(key)); err == nil {
+		return n
 	}
 	return fallback
 }

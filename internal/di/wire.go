@@ -11,6 +11,7 @@ import (
 	"github.com/Flawed-Four/muni-backend/internal/delivery/http/handler"
 	"github.com/Flawed-Four/muni-backend/internal/domain"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/database"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/email"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/security"
 	"github.com/Flawed-Four/muni-backend/internal/repository/postgres"
 	"github.com/Flawed-Four/muni-backend/internal/usecase"
@@ -23,6 +24,8 @@ var infraSet = wire.NewSet(
 	wire.Bind(new(domain.TokenService), new(*security.SessionTokens)),
 	security.NewBcryptHasher,
 	wire.Bind(new(domain.PasswordHasher), new(*security.BcryptHasher)),
+	email.NewSMTPSender,
+	wire.Bind(new(domain.EmailSender), new(*email.SMTPSender)),
 )
 
 var repoSet = wire.NewSet(

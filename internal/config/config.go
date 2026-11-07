@@ -12,6 +12,7 @@ type Config struct {
 	App     AppConfig
 	DB      DBConfig
 	Session SessionConfig
+	SMTP    SMTPConfig
 }
 
 type AppConfig struct {
@@ -30,6 +31,19 @@ type DBConfig struct {
 
 type SessionConfig struct {
 	TTL time.Duration `env:"SESSION_TTL" envDefault:"24h"`
+}
+
+// SMTPConfig describes the outgoing mail relay. Nothing here is marked required
+// because the app must still boot without email; email.NewSMTPSender validates it.
+type SMTPConfig struct {
+	Host        string        `env:"SMTP_HOST" envDefault:"localhost"`
+	Port        int           `env:"SMTP_PORT" envDefault:"587"`
+	Username    string        `env:"SMTP_USERNAME"`
+	Password    string        `env:"SMTP_PASSWORD"`
+	FromAddress string        `env:"SMTP_FROM_ADDRESS"`
+	FromName    string        `env:"SMTP_FROM_NAME" envDefault:"Muni"`
+	TLSMode     string        `env:"SMTP_TLS_MODE" envDefault:"starttls"` // starttls, tls or none
+	Timeout     time.Duration `env:"SMTP_TIMEOUT" envDefault:"10s"`
 }
 
 // DSN returns the PostgreSQL connection string.

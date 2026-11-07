@@ -6,11 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 make run                      # go run ./cmd/api (reads .env; copy from .env.example first)
-make docker-up                # dev Postgres + migrations via compose (docker-down to stop)
-make test                     # starts postgres-test, runs ALL tests, always tears the DB down
-make test-db-up               # start only the test DB (tmpfs, port 55432)
-make test-run                 # go test ./... against an already-running test DB
-go test -count=1 ./internal/integration -run TestRegisterLoginMe   # single test (test DB must be up)
+make docker-up                # dev Postgres + migrations + Mailpit via compose (docker-down to stop)
+make test                     # starts postgres-test + mailpit-test, runs ALL tests, always tears them down
+make test-db-up               # start only the test services (Postgres 55432, Mailpit SMTP 51025 / API 58025)
+make test-run                 # go test ./... against already-running test services
+go test -count=1 ./internal/integration -run TestRegisterLoginMe   # single test (test services must be up)
 make lint                     # go vet ./...
 make generate                 # sqlc + swag + wire (see "Generated code")
 make migrate-create name=xxx  # new sequential migration in db/migrations
@@ -25,10 +25,10 @@ Clean architecture; dependencies point inward:
 ```
 delivery/http ──► usecase ──► domain ◄── repository/postgres
                                  ▲
-                                 └── infrastructure (session tokens, bcrypt, pgx pool)
+                                 └── infrastructure (session tokens, bcrypt, pgx pool, SMTP)
 ```
 
-- `internal/domain` holds entities, the interfaces (`UserRepository`, `SessionRepository`, `TokenService`, `PasswordHasher`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
+- `internal/domain` holds entities, the interfaces (`UserRepository`, `SessionRepository`, `TokenService`, `PasswordHasher`, `EmailSender`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
 - Errors flow upward as domain sentinels (`ErrNotFound`, `ErrEmailTaken`, `ErrInvalidCredentials`, `ErrInvalidToken`). Repositories translate DB errors into them (unique violation → `ErrEmailTaken`; no rows and malformed UUID → `ErrNotFound`). Match Postgres error codes with `errors.As(err, &*pgconn.PgError)` and the constants from `github.com/jackc/pgerrcode` (e.g. `pgerrcode.UniqueViolation`) — never string literals like `"23505"` or new local constants. `delivery/http/response.Fail` is the single place mapping them to HTTP status; unknown errors become a logged 500.
 - Handlers wrap payloads as `{"data": ...}` / `{"error": {"message": ...}}`.
 - `internal/di/wire.go` (build tag `wireinject`) defines provider sets per layer; `wire_gen.go` is the generated result. `App` (in `app.go`) holds the `*http.Server`. A new interface binding needs a `wire.Bind` in the same set as the concrete provider (e.g. `handler.Pinger` ← `*pgxpool.Pool` is bound in `infraSet`), otherwise Wire fails.
@@ -59,10 +59,16 @@ delivery/http ──► usecase ──► domain ◄── repository/postgres
 
 ## Testing
 
-All tests are integration tests in `internal/integration` against a real PostgreSQL (compose service `postgres-test`, profile `test`) — **no mocks**; keep it that way. `TestMain` applies the real migrations with golang-migrate, then builds the HTTP handler via `di.InitializeApp`, i.e. the production Wire graph. Tests call `resetDB(t)` (TRUNCATE) first and run sequentially because they share one DB, so don't add `t.Parallel()` or a second package that uses the same DB. If the DB is down the suite fails (it does not skip). Override with `TEST_DB_PORT` / `POSTGRES_IMAGE`.
+All tests are integration tests in `internal/integration` against a real PostgreSQL and a real Mailpit (compose services `postgres-test` and `mailpit-test`, profile `test`) — **no mocks**; keep it that way. `TestMain` applies the real migrations with golang-migrate, then builds the HTTP handler via `di.InitializeApp`, i.e. the production Wire graph. Tests call `resetDB(t)` (TRUNCATE) first, and email tests call `resetMail(t)` and read the result through Mailpit's REST API. They run sequentially because they share one DB and one inbox, so don't add `t.Parallel()` or a second package that uses them. If either service is down the suite fails (it does not skip). Override with `TEST_DB_PORT` / `TEST_SMTP_PORT` / `TEST_MAILPIT_PORT` / `POSTGRES_IMAGE`.
+
+Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `SMTPSender` are not covered there beyond checking that `starttls` refuses to fall back to plaintext.
 
 ## Gotchas
 
 - Auth is stateful: `login` inserts a row in `sessions` and returns an opaque random token; only its SHA-256 is stored. The `Auth` middleware calls `AuthUsecase.Authenticate`, which hits the DB on every request (and bumps `last_used_at`). Unknown, revoked and expired sessions all surface as `ErrInvalidToken`.
 
 - Login returns the same `ErrInvalidCredentials` for unknown email and wrong password (no user enumeration); tests assert this.
+
+- `domain.EmailSender` is bound in `infraSet`, but nothing consumes it yet, so Wire leaves `NewSMTPSender` out of `InitializeApp` and its config validation does not run at startup. Once a usecase takes `domain.EmailSender`, an invalid `SMTP_FROM_ADDRESS` or `SMTP_TLS_MODE` stops the app from booting.
+
+- `EmailSender.Send` is synchronous and opens a new connection per call, so calling it from a request path adds the SMTP round trip to the response time.
