@@ -13,6 +13,7 @@ import (
 	"github.com/Flawed-Four/muni-backend/internal/domain"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/database"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/email"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/kvstore"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/security"
 	"github.com/Flawed-Four/muni-backend/internal/repository/postgres"
 	"github.com/Flawed-Four/muni-backend/internal/usecase"
@@ -49,7 +50,7 @@ func InitializeApp(cfg *config.Config) (*App, func(), error) {
 
 // wire.go:
 
-var infraSet = wire.NewSet(database.NewPgxPool, wire.Bind(new(handler.Pinger), new(*pgxpool.Pool)), security.NewSessionTokens, wire.Bind(new(domain.TokenService), new(*security.SessionTokens)), security.NewBcryptHasher, wire.Bind(new(domain.PasswordHasher), new(*security.BcryptHasher)), email.NewSMTPSender, wire.Bind(new(domain.EmailSender), new(*email.SMTPSender)))
+var infraSet = wire.NewSet(database.NewPgxPool, wire.Bind(new(handler.Pinger), new(*pgxpool.Pool)), security.NewSessionTokens, wire.Bind(new(domain.TokenService), new(*security.SessionTokens)), security.NewBcryptHasher, wire.Bind(new(domain.PasswordHasher), new(*security.BcryptHasher)), email.NewSMTPSender, wire.Bind(new(domain.EmailSender), new(*email.SMTPSender)), kvstore.NewRedisClient, kvstore.NewRedisStore, wire.Bind(new(domain.KeyValueStore), new(*kvstore.RedisStore)))
 
 var repoSet = wire.NewSet(postgres.NewUserRepository, wire.Bind(new(domain.UserRepository), new(*postgres.UserRepository)), postgres.NewSessionRepository, wire.Bind(new(domain.SessionRepository), new(*postgres.SessionRepository)))
 
