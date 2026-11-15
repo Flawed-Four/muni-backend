@@ -1,14 +1,16 @@
-// Package integration runs the application against a real PostgreSQL, Mailpit
-// and Redis (the postgres-test, mailpit-test and redis-test services in
-// docker-compose.yml). Nothing is mocked: the HTTP stack is built through the
-// same Wire graph used in production.
+// Package integration runs the application against a real PostgreSQL, Mailpit,
+// Redis and Chroma (the postgres-test, mailpit-test, redis-test and chroma-test
+// services in docker-compose.yml). Nothing is mocked: the HTTP stack is built
+// through the same Wire graph used in production.
 package integration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +29,7 @@ import (
 	"github.com/Flawed-Four/muni-backend/internal/di"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/database"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/kvstore"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/vectorstore"
 )
 
 var (
@@ -35,6 +38,8 @@ var (
 	testRedis   *redis.Client
 	testHandler http.Handler
 	mailpitURL  string
+	// chromaDBURL lets tests call Chroma directly, bypassing the store.
+	chromaDBURL string
 )
 
 func TestMain(m *testing.M) {
@@ -45,6 +50,8 @@ func run(m *testing.M) int {
 	gin.SetMode(gin.TestMode)
 	testCfg = loadTestConfig()
 	mailpitURL = fmt.Sprintf("http://%s:%d", testCfg.SMTP.Host, getenvInt("TEST_MAILPIT_PORT", 58025))
+	chromaDBURL = fmt.Sprintf("http://%s:%d/api/v2/tenants/%s/databases/%s", testCfg.Chroma.Host, testCfg.Chroma.Port,
+		url.PathEscape(testCfg.Chroma.Tenant), url.PathEscape(testCfg.Chroma.Database))
 
 	if err := migrateUp(testCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "integration: cannot prepare test database: %v\n"+
@@ -69,6 +76,14 @@ func run(m *testing.M) int {
 	defer closeRedis()
 	testRedis = redisClient
 
+	_, closeChroma, err := vectorstore.NewChromaStore(testCfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "integration: %v\n"+
+			"Is it running? Start it with `make test-db-up`, or run everything with `make test`.\n", err)
+		return 1
+	}
+	closeChroma()
+
 	app, cleanup, err := di.InitializeApp(testCfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "integration: build app: %v\n", err)
@@ -80,7 +95,7 @@ func run(m *testing.M) int {
 	return m.Run()
 }
 
-// loadTestConfig defaults match the postgres-test, mailpit-test and redis-test services in docker-compose.yml.
+// loadTestConfig defaults match the postgres-test, mailpit-test, redis-test and chroma-test services in docker-compose.yml.
 func loadTestConfig() *config.Config {
 	return &config.Config{
 		App: config.AppConfig{Env: "test", Port: 0},
@@ -105,6 +120,13 @@ func loadTestConfig() *config.Config {
 			Host:    getenv("TEST_REDIS_HOST", "localhost"),
 			Port:    getenvInt("TEST_REDIS_PORT", 56379),
 			Timeout: time.Second,
+		},
+		Chroma: config.ChromaConfig{
+			Host:     getenv("TEST_CHROMA_HOST", "localhost"),
+			Port:     getenvInt("TEST_CHROMA_PORT", 58000),
+			Tenant:   "default_tenant",
+			Database: "default_database",
+			Timeout:  5 * time.Second,
 		},
 	}
 }
@@ -158,4 +180,47 @@ func resetRedis(t *testing.T) {
 	if err := testRedis.FlushDB(context.Background()).Err(); err != nil {
 		t.Fatalf("flush redis: %v", err)
 	}
+}
+
+// resetChroma deletes every collection so each test starts clean.
+func resetChroma(t *testing.T) {
+	t.Helper()
+	for _, name := range chromaCollections(t) {
+		req, err := http.NewRequest(http.MethodDelete, chromaDBURL+"/collections/"+url.PathEscape(name), nil)
+		if err != nil {
+			t.Fatalf("delete chroma collection %s: %v", name, err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("delete chroma collection %s: %v", name, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("delete chroma collection %s: status %d", name, resp.StatusCode)
+		}
+	}
+}
+
+func chromaCollections(t *testing.T) []string {
+	t.Helper()
+	resp, err := http.Get(chromaDBURL + "/collections")
+	if err != nil {
+		t.Fatalf("list chroma collections: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list chroma collections: status %d", resp.StatusCode)
+	}
+
+	var collections []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&collections); err != nil {
+		t.Fatalf("decode chroma collections: %v", err)
+	}
+	names := make([]string, len(collections))
+	for i, c := range collections {
+		names[i] = c.Name
+	}
+	return names
 }

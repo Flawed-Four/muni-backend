@@ -14,6 +14,7 @@ type Config struct {
 	Session SessionConfig
 	SMTP    SMTPConfig
 	Redis   RedisConfig
+	Chroma  ChromaConfig
 }
 
 type AppConfig struct {
@@ -56,6 +57,17 @@ type RedisConfig struct {
 	DB       int           `env:"REDIS_DB" envDefault:"0"`
 	TLS      bool          `env:"REDIS_TLS" envDefault:"false"`
 	Timeout  time.Duration `env:"REDIS_TIMEOUT" envDefault:"3s"` // per dial, read and write
+}
+
+// ChromaConfig describes the Chroma server behind domain.VectorStore.
+type ChromaConfig struct {
+	Host     string        `env:"CHROMA_HOST" envDefault:"localhost"`
+	Port     int           `env:"CHROMA_PORT" envDefault:"8000"`
+	TLS      bool          `env:"CHROMA_TLS" envDefault:"false"`
+	APIKey   string        `env:"CHROMA_API_KEY"` // Chroma Cloud, sent as x-chroma-token
+	Tenant   string        `env:"CHROMA_TENANT" envDefault:"default_tenant"`
+	Database string        `env:"CHROMA_DATABASE" envDefault:"default_database"`
+	Timeout  time.Duration `env:"CHROMA_TIMEOUT" envDefault:"10s"` // per request
 }
 
 // DSN returns the PostgreSQL connection string.

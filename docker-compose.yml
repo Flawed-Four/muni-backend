@@ -85,6 +85,41 @@ services:
       timeout: 3s
       retries: 20
 
+  # Local Chroma without auth, so it must stay bound to loopback.
+  # The image has no curl, so the healthcheck sends HTTP through bash.
+  # nofile: Chroma keeps files open even for deleted collections; 1024 runs out.
+  chroma:
+    image: ${CHROMA_IMAGE:-ghcr.io/chroma-core/chroma:1.5.9}
+    restart: "no"
+    ulimits:
+      nofile: 65536
+    ports:
+      - "127.0.0.1:${CHROMA_PORT:-8000}:8000"
+    volumes:
+      - chromadata:/data
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000 && printf 'GET /api/v2/heartbeat HTTP/1.0\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Disposable Chroma for automated tests (see `make test`). Data lives in tmpfs.
+  chroma-test:
+    image: ${CHROMA_IMAGE:-ghcr.io/chroma-core/chroma:1.5.9}
+    restart: "no"
+    profiles: ["test"]
+    ulimits:
+      nofile: 65536
+    ports:
+      - "127.0.0.1:${TEST_CHROMA_PORT:-58000}:8000"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000 && printf 'GET /api/v2/heartbeat HTTP/1.0\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
   migrate:
     image: migrate/migrate:v4.20.1
     restart: "no"
@@ -107,6 +142,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      chroma:
+        condition: service_healthy
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_PORT: 8080
@@ -124,8 +161,11 @@ services:
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Muni}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
     ports:
       - "${APP_PORT:-8080}:8080"
 
 volumes:
   pgdata:
+  chromadata:

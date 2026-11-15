@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 make run                      # go run ./cmd/api (reads .env; copy from .env.example first)
-make docker-up                # dev Postgres + migrations + Mailpit + Redis via compose (docker-down to stop)
-make test                     # starts postgres-test + mailpit-test + redis-test, runs ALL tests, always tears them down
-make test-db-up               # start only the test services (Postgres 55432, Mailpit SMTP 51025 / API 58025, Redis 56379)
+make docker-up                # dev Postgres + migrations + Mailpit + Redis + Chroma via compose (docker-down to stop)
+make test                     # starts postgres-test + mailpit-test + redis-test + chroma-test, runs ALL tests, always tears them down
+make test-db-up               # start only the test services (Postgres 55432, Mailpit SMTP 51025 / API 58025, Redis 56379, Chroma 58000)
 make test-run                 # go test ./... against already-running test services
 go test -count=1 ./internal/integration -run TestRegisterLoginMe   # single test (test services must be up)
 make lint                     # go vet ./...
@@ -25,10 +25,10 @@ Clean architecture; dependencies point inward:
 ```
 delivery/http ──► usecase ──► domain ◄── repository/postgres
                                  ▲
-                                 └── infrastructure (session tokens, bcrypt, pgx pool, SMTP, Redis)
+                                 └── infrastructure (session tokens, bcrypt, pgx pool, SMTP, Redis, Chroma)
 ```
 
-- `internal/domain` holds entities, the interfaces (`UserRepository`, `SessionRepository`, `TokenService`, `PasswordHasher`, `EmailSender`, `KeyValueStore`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
+- `internal/domain` holds entities, the interfaces (`UserRepository`, `SessionRepository`, `TokenService`, `PasswordHasher`, `EmailSender`, `KeyValueStore`, `VectorStore`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
 - Errors flow upward as domain sentinels (`ErrNotFound`, `ErrEmailTaken`, `ErrInvalidCredentials`, `ErrInvalidToken`). Repositories translate DB errors into them (unique violation → `ErrEmailTaken`; no rows and malformed UUID → `ErrNotFound`). Match Postgres error codes with `errors.As(err, &*pgconn.PgError)` and the constants from `github.com/jackc/pgerrcode` (e.g. `pgerrcode.UniqueViolation`) — never string literals like `"23505"` or new local constants. `delivery/http/response.Fail` is the single place mapping them to HTTP status; unknown errors become a logged 500.
 - Handlers wrap payloads as `{"data": ...}` / `{"error": {"message": ...}}`.
 - `internal/di/wire.go` (build tag `wireinject`) defines provider sets per layer; `wire_gen.go` is the generated result. `App` (in `app.go`) holds the `*http.Server`. A new interface binding needs a `wire.Bind` in the same set as the concrete provider (e.g. `handler.Pinger` ← `*pgxpool.Pool` is bound in `infraSet`), otherwise Wire fails.
@@ -59,9 +59,9 @@ delivery/http ──► usecase ──► domain ◄── repository/postgres
 
 ## Testing
 
-All tests are integration tests in `internal/integration` against a real PostgreSQL, a real Mailpit and a real Redis (compose services `postgres-test`, `mailpit-test` and `redis-test`, profile `test`) — **no mocks**; keep it that way. `TestMain` applies the real migrations with golang-migrate, then builds the HTTP handler via `di.InitializeApp`, i.e. the production Wire graph. Tests call `resetDB(t)` (TRUNCATE) first, email tests call `resetMail(t)` and read the result through Mailpit's REST API, and Redis tests call `resetRedis(t)` (FLUSHDB). They run sequentially because they share one DB, one inbox and one Redis, so don't add `t.Parallel()` or a second package that uses them. If any service is down the suite fails (it does not skip). Override with `TEST_DB_PORT` / `TEST_SMTP_PORT` / `TEST_MAILPIT_PORT` / `TEST_REDIS_PORT` / `POSTGRES_IMAGE` / `REDIS_IMAGE`.
+All tests are integration tests in `internal/integration` against a real PostgreSQL, a real Mailpit, a real Redis and a real Chroma (compose services `postgres-test`, `mailpit-test`, `redis-test` and `chroma-test`, profile `test`) — **no mocks**; keep it that way. `TestMain` applies the real migrations with golang-migrate, then builds the HTTP handler via `di.InitializeApp`, i.e. the production Wire graph. Tests call `resetDB(t)` (TRUNCATE) first, email tests call `resetMail(t)` and read the result through Mailpit's REST API, Redis tests call `resetRedis(t)` (FLUSHDB), and Chroma tests call `resetChroma(t)` (deletes every collection in the test database). They run sequentially because they share one DB, one inbox, one Redis and one Chroma, so don't add `t.Parallel()` or a second package that uses them. If any service is down the suite fails (it does not skip). Override with `TEST_DB_PORT` / `TEST_SMTP_PORT` / `TEST_MAILPIT_PORT` / `TEST_REDIS_PORT` / `TEST_CHROMA_PORT` / `POSTGRES_IMAGE` / `REDIS_IMAGE` / `CHROMA_IMAGE`.
 
-Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `SMTPSender` are not covered there beyond checking that `starttls` refuses to fall back to plaintext. The same goes for `redis-test` and `NewRedisClient`: only the refusal to fall back from TLS is covered.
+Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `SMTPSender` are not covered there beyond checking that `starttls` refuses to fall back to plaintext. The same goes for `redis-test` and `NewRedisClient`, and for `chroma-test` and `NewChromaStore` (no TLS, no API key): only the refusal to fall back from TLS is covered. The Chroma timeout test uses a local TCP listener that never answers, because Chroma cannot be stalled on purpose; it checks the client, not Chroma.
 
 ## Gotchas
 
@@ -78,3 +78,17 @@ Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `
 - `KeyValueStore` rejects a non-positive TTL because go-redis reads `0` as "never expire" and `-1` as "keep the current TTL". `Incr` has to stay a single transaction for the same reason: a counter left without a TTL would lock its subject out for good.
 
 - OTP codes and rate-limit counters share Redis with cache entries, so a production Redis with `maxmemory` must run `noeviction`. An evicting policy can drop them under memory pressure, which invalidates a pending code or resets a limit.
+
+- `domain.VectorStore` is bound in `infraSet` with no consumer yet, so Wire leaves `NewChromaStore` out of `InitializeApp` and the app neither connects to Chroma nor needs it. Once a usecase takes `domain.VectorStore`, the app checks Chroma's heartbeat and the configured tenant/database at boot and refuses to start without them. `/health` does not check Chroma.
+
+- `ChromaStore` is a thin `net/http` client for the Chroma REST API v2, not `chroma-go`: that library creates a default ONNX embedding function (downloading onnxruntime and a model at runtime) whenever a collection is created without one, which fails in the distroless/static image. Chroma computes no embeddings itself here, so callers pass vectors.
+
+- A collection is created by its first `Upsert` with cosine distance, and that write fixes the embedding dimension; switching embedding models means a new collection. `Query`/`Delete`/`DeleteWhere` on a missing collection find nothing and do not create it. Collection IDs are cached per store; a 404 drops the cached ID and retries once, so a collection recreated outside the app is picked up.
+
+- Chroma's upsert merges metadata: new keys overwrite, omitted old keys stay. The document is always sent (an empty string clears it). Floats are encoded with a decimal point (`jsonFloat`) because `encoding/json` writes `3.0` as `3`, which Chroma would store as an integer.
+
+- Chroma 1.5.9 keeps about four files open per collection segment, deleted collections included until it restarts, so the default `nofile` of 1024 runs out after a few hundred collections and every request fails with `unable to open database file` (SQLite code 14). Both compose services set `ulimits.nofile: 65536`; a production deployment needs the same. It is also why collections are per kind of data, never per user.
+
+- `Query` is approximate (HNSW). Real embeddings get near-perfect recall, but tests use tiny 2-D vectors, where a record written in a random order (e.g. concurrently) can be stored yet never returned. Tests that check what was written should count through the API (`chromaCount`), not through `Query`; query tests write sequentially and keep record counts small.
+
+- A collection shared by several users must be filtered by owner on every `Query` (owner in `Metadata` and in `Where`). `Delete` with no IDs and `DeleteWhere` with an empty filter never reach the server, so a missing filter cannot wipe a collection.

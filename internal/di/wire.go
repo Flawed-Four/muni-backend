@@ -14,6 +14,7 @@ import (
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/email"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/kvstore"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/security"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/vectorstore"
 	"github.com/Flawed-Four/muni-backend/internal/repository/postgres"
 	"github.com/Flawed-Four/muni-backend/internal/usecase"
 )
@@ -30,6 +31,8 @@ var infraSet = wire.NewSet(
 	kvstore.NewRedisClient,
 	kvstore.NewRedisStore,
 	wire.Bind(new(domain.KeyValueStore), new(*kvstore.RedisStore)),
+	vectorstore.NewChromaStore,
+	wire.Bind(new(domain.VectorStore), new(*vectorstore.ChromaStore)),
 )
 
 var repoSet = wire.NewSet(
