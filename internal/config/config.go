@@ -15,6 +15,7 @@ type Config struct {
 	SMTP    SMTPConfig
 	Redis   RedisConfig
 	Chroma  ChromaConfig
+	Gemini  GeminiConfig
 }
 
 type AppConfig struct {
@@ -68,6 +69,17 @@ type ChromaConfig struct {
 	Tenant   string        `env:"CHROMA_TENANT" envDefault:"default_tenant"`
 	Database string        `env:"CHROMA_DATABASE" envDefault:"default_database"`
 	Timeout  time.Duration `env:"CHROMA_TIMEOUT" envDefault:"10s"` // per request
+}
+
+// GeminiConfig describes the Gemini API behind domain.LanguageModel.
+// Nothing is required so the app boots without a key; llm.NewGemini validates it.
+type GeminiConfig struct {
+	APIKey        string        `env:"GEMINI_API_KEY"`
+	Model         string        `env:"GEMINI_MODEL" envDefault:"gemini-3.5-flash-lite"`
+	ThinkingLevel string        `env:"GEMINI_THINKING_LEVEL" envDefault:"low"`
+	Timeout       time.Duration `env:"GEMINI_TIMEOUT" envDefault:"120s"` // per HTTP attempt
+	MaxRetries    int           `env:"GEMINI_MAX_RETRIES" envDefault:"2"`
+	BaseURL       string        `env:"GEMINI_BASE_URL"` // empty = Google's endpoint
 }
 
 // DSN returns the PostgreSQL connection string.

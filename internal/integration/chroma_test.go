@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -512,44 +511,16 @@ func TestNewChromaStore_TLSDoesNotFallBackToPlaintext(t *testing.T) {
 // Chroma cannot be paused on purpose, so a listener that never replies stands
 // in for a hung server. This tests our timeout, not Chroma.
 func TestNewChromaStore_TimeoutBoundsStalledServer(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-
-	var mu sync.Mutex
-	var conns []net.Conn
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			mu.Lock()
-			conns = append(conns, conn)
-			mu.Unlock()
-		}
-	}()
-	t.Cleanup(func() {
-		_ = ln.Close()
-		<-done
-		mu.Lock()
-		defer mu.Unlock()
-		for _, c := range conns {
-			_ = c.Close()
-		}
-	})
+	addr := stalledServer(t)
 
 	const timeout = 200 * time.Millisecond
 	cfg := *testCfg
 	cfg.Chroma.Host = "127.0.0.1"
-	cfg.Chroma.Port = ln.Addr().(*net.TCPAddr).Port
+	cfg.Chroma.Port = addr.Port
 	cfg.Chroma.Timeout = timeout
 
 	start := time.Now()
-	_, _, err = vectorstore.NewChromaStore(&cfg)
+	_, _, err := vectorstore.NewChromaStore(&cfg)
 	elapsed := time.Since(start)
 
 	if err == nil {

@@ -9,12 +9,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -128,6 +130,14 @@ func loadTestConfig() *config.Config {
 			Database: "default_database",
 			Timeout:  5 * time.Second,
 		},
+		// Only TEST_GEMINI_API_KEY is read, so a key in .env is never billed by tests.
+		Gemini: config.GeminiConfig{
+			APIKey:        os.Getenv("TEST_GEMINI_API_KEY"),
+			Model:         getenv("TEST_GEMINI_MODEL", "gemini-3.5-flash-lite"),
+			ThinkingLevel: "low",
+			Timeout:       60 * time.Second,
+			MaxRetries:    2,
+		},
 	}
 }
 
@@ -163,6 +173,41 @@ func getenvInt(key string, fallback int) int {
 		return n
 	}
 	return fallback
+}
+
+// stalledServer accepts connections but never answers, standing in for a hung server.
+func stalledServer(t *testing.T) *net.TCPAddr {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	var mu sync.Mutex
+	var conns []net.Conn
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			conns = append(conns, conn)
+			mu.Unlock()
+		}
+	}()
+	t.Cleanup(func() {
+		_ = ln.Close()
+		<-done
+		mu.Lock()
+		defer mu.Unlock()
+		for _, c := range conns {
+			_ = c.Close()
+		}
+	})
+	return ln.Addr().(*net.TCPAddr)
 }
 
 // resetDB empties all tables so every test starts from a clean state.

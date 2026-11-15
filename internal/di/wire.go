@@ -13,6 +13,7 @@ import (
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/database"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/email"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/kvstore"
+	"github.com/Flawed-Four/muni-backend/internal/infrastructure/llm"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/security"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/vectorstore"
 	"github.com/Flawed-Four/muni-backend/internal/repository/postgres"
@@ -33,6 +34,8 @@ var infraSet = wire.NewSet(
 	wire.Bind(new(domain.KeyValueStore), new(*kvstore.RedisStore)),
 	vectorstore.NewChromaStore,
 	wire.Bind(new(domain.VectorStore), new(*vectorstore.ChromaStore)),
+	llm.NewGemini,
+	wire.Bind(new(domain.LanguageModel), new(*llm.Gemini)),
 )
 
 var repoSet = wire.NewSet(
