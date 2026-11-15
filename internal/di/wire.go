@@ -40,18 +40,26 @@ var repoSet = wire.NewSet(
 	wire.Bind(new(domain.UserRepository), new(*postgres.UserRepository)),
 	postgres.NewSessionRepository,
 	wire.Bind(new(domain.SessionRepository), new(*postgres.SessionRepository)),
+	postgres.NewNoteRepository,
+	wire.Bind(new(domain.NoteRepository), new(*postgres.NoteRepository)),
+	postgres.NewNoteTagRepository,
+	wire.Bind(new(domain.NoteTagRepository), new(*postgres.NoteTagRepository)),
 )
 
 var usecaseSet = wire.NewSet(
 	ProvideSessionTTL,
 	usecase.NewAuthUsecase,
 	usecase.NewUserUsecase,
+	usecase.NewNoteUsecase,
+	usecase.NewNoteTagUsecase,
 )
 
 var handlerSet = wire.NewSet(
 	handler.NewHealthHandler,
 	handler.NewAuthHandler,
 	handler.NewUserHandler,
+	handler.NewNoteHandler,
+	handler.NewNoteTagHandler,
 )
 
 var httpSet = wire.NewSet(

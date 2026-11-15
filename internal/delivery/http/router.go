@@ -16,6 +16,8 @@ func NewRouter(
 	health *handler.HealthHandler,
 	auth *handler.AuthHandler,
 	user *handler.UserHandler,
+	note *handler.NoteHandler,
+	noteTag *handler.NoteTagHandler,
 ) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -32,6 +34,19 @@ func NewRouter(
 		protected.POST("/auth/logout", auth.Logout)
 		protected.POST("/auth/logout-all", auth.LogoutAll)
 		protected.GET("/users/me", user.Me)
+		// Notes
+		protected.POST("/notes", note.Create)
+		protected.GET("/notes", note.List)
+		protected.GET("/notes/:id", note.GetByID)
+		protected.PUT("/notes/:id", note.Update)
+		protected.DELETE("/notes/:id", note.Delete)
+		protected.GET("/notes/:id/tags", note.ListTags)
+		// Tags
+		protected.POST("/tags", noteTag.Create)
+		protected.GET("/tags", noteTag.List)
+		protected.GET("/tags/:id", noteTag.GetByID)
+		protected.PUT("/tags/:id", noteTag.Update)
+		protected.DELETE("/tags/:id", noteTag.Delete)
 	}
 
 	return r
