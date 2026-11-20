@@ -58,6 +58,19 @@ Setelah mengubah `db/queries/*.sql` atau skema migrasi jalankan `make sqlc`; set
 
 Autentikasi bersifat stateful: `login` membuat baris di tabel `sessions` dan mengembalikan token opaque acak (hanya hash SHA-256-nya yang disimpan). Setiap request memeriksa sesi di DB, sehingga logout / revoke langsung berlaku. Masa berlaku diatur lewat `SESSION_TTL` (default `24h`).
 
+## IP klien dan proxy
+
+IP klien diambil dari `c.ClientIP()`, disimpan di `sessions.ip_address` saat login, dan dicatat sebagai `ip` di log request. Secara default aplikasi tidak memercayai proxy mana pun, jadi yang dipakai adalah alamat koneksi TCP. Header `X-Forwarded-For` dan `X-Real-IP` dari klien diabaikan karena isinya bisa dikarang.
+
+Jika aplikasi berjalan di belakang load balancer atau reverse proxy, isi `TRUSTED_PROXIES` dengan IP/CIDR proxy itu. `X-Forwarded-For` hanya dipercaya jika request datang dari alamat tersebut. Yang dipakai adalah alamat paling kanan yang bukan proxy tepercaya, jadi alamat palsu yang ditaruh klien di depan tetap diabaikan.
+
+| Env | Default | Keterangan |
+|---|---|---|
+| `TRUSTED_PROXIES` | kosong | IP/CIDR dipisah koma, misalnya `10.0.0.0/8,172.16.0.0/12`. Kosong berarti tidak ada proxy yang dipercaya. Entri yang tidak valid membuat aplikasi gagal start |
+| `TRUSTED_PLATFORM` | kosong | Nama header berisi IP klien yang diisi platform, misalnya `CF-Connecting-IP` untuk Cloudflare |
+
+`TRUSTED_PLATFORM` dipercaya dari siapa pun, tanpa memeriksa alamat pengirimnya. Jadi header itu hanya aman dipakai jika aplikasi tidak bisa diakses selain lewat platform tersebut (misalnya firewall hanya menerima IP Cloudflare, atau memakai Cloudflare Tunnel). Jika tidak yakin, pakai `TRUSTED_PROXIES` berisi [rentang IP Cloudflare](https://www.cloudflare.com/ips/), karena Cloudflare juga menambahkan IP klien ke `X-Forwarded-For`.
+
 ## Email
 
 Pengiriman email lewat SMTP ada di `internal/infrastructure/email`, di belakang interface `domain.EmailSender`. Usecase yang perlu mengirim email cukup menerima interface itu sebagai dependency; implementasinya sudah terdaftar di Wire. Saat ini belum ada fitur yang memakainya.
@@ -165,7 +178,7 @@ Beberapa hal yang perlu diperhatikan:
 Semua log ditulis lewat `log/slog` ke stdout. `main` memasang logger dari `internal/logging` sebagai default, jadi kode di layer mana pun cukup memanggil `slog.InfoContext(ctx, ...)` / `slog.ErrorContext(ctx, ...)`.
 
 - Middleware `RequestLogger` memberi setiap request ID (`X-Request-ID` dari klien dipakai bila formatnya valid, selain itu dibuat baru) dan mengembalikannya di header response.
-- Setiap request menghasilkan **satu** baris log `request` berisi `method`, `route`, `status`, `latency_ms`, `ip`, `request_id`, `user_id` (bila login), dan `err` (bila ada). Status 5xx dicatat sebagai `ERROR`, sisanya `INFO`. `/health` yang sukses tidak dicatat.
+- Setiap request menghasilkan **satu** baris log `request` berisi `method`, `route`, `status`, `latency_ms`, `ip`, `request_id`, `user_id` (bila login), dan `err` (bila ada). Asal `ip` dijelaskan di [IP klien dan proxy](#ip-klien-dan-proxy). Status 5xx dicatat sebagai `ERROR`, sisanya `INFO`. `/health` yang sukses tidak dicatat.
 - Log yang ditulis dengan context request otomatis membawa `request_id` dan `user_id`, sehingga bisa dicari bersama di log aggregator.
 - Panic dicatat sebagai `panic recovered` beserta stack trace, lalu dijawab 500.
 - Body request, header `Authorization`, token, password, dan API key tidak pernah dicatat; yang dicatat adalah pola route (`/api/v1/users/me`), bukan URL beserta query string.

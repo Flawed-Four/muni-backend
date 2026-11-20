@@ -22,6 +22,12 @@ type Config struct {
 type AppConfig struct {
 	Env  string `env:"APP_ENV" envDefault:"development"`
 	Port int    `env:"APP_PORT" envDefault:"8080"`
+	// TrustedProxies lists the proxy IPs/CIDRs whose X-Forwarded-For is believed.
+	// Empty = trust no proxy, so the client IP is the TCP peer address.
+	TrustedProxies []string `env:"TRUSTED_PROXIES"`
+	// TrustedPlatform is a header that holds the client IP, e.g. CF-Connecting-IP.
+	// It is believed from any peer, so only set it when the platform is the only way in.
+	TrustedPlatform string `env:"TRUSTED_PLATFORM"`
 }
 
 // LogConfig is validated by logging.New.

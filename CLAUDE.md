@@ -72,13 +72,15 @@ Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `
 - Never log request bodies, the `Authorization` header, session tokens, passwords, API keys or `DBConfig.DSN()`. Log the route pattern (`c.FullPath()`), never the raw URL, so query strings stay out.
 - `X-Request-ID` from the client is reused only if it is ≤ 64 chars of `[A-Za-z0-9._-]`; otherwise a new one is generated. It is echoed in the response so a user can quote it.
 - `gin.SetMode` runs in `NewRouter` before `gin.New`; setting it later lets Gin print debug output in production.
-- `ip` comes from `c.ClientIP()`, and no trusted proxies are configured, so Gin trusts `X-Forwarded-For` from anyone: the logged (and stored) IP can be spoofed until `SetTrustedProxies` is set up.
+- `ip` comes from `c.ClientIP()`, which believes `X-Forwarded-For` only from a peer in `TRUSTED_PROXIES` (see "Gotchas").
 
 ## Gotchas
 
 - Auth is stateful: `login` inserts a row in `sessions` and returns an opaque random token; only its SHA-256 is stored. The `Auth` middleware calls `AuthUsecase.Authenticate`, which hits the DB on every request (and bumps `last_used_at`). Unknown, revoked and expired sessions all surface as `ErrInvalidToken`.
 
 - Login returns the same `ErrInvalidCredentials` for unknown email and wrong password (no user enumeration); tests assert this.
+
+- `c.ClientIP()` (the `ip` of the request log line, and `sessions.ip_address` at login) believes `X-Forwarded-For` / `X-Real-IP` only when the TCP peer is in `TRUSTED_PROXIES`. Gin's own default trusts every peer, so `NewRouter` always calls `SetTrustedProxies`; an empty list becomes `nil` (trust none). An invalid entry makes `NewRouter`, and so `InitializeApp`, fail at boot. `TRUSTED_PLATFORM` (e.g. `CF-Connecting-IP`) is believed from any peer, so it is only safe when the platform is the only way in. Tests that need another config build a second app with `newTestHandler`; `httptest.NewRequest` uses peer `192.0.2.1`.
 
 - `domain.EmailSender` is bound in `infraSet`, but nothing consumes it yet, so Wire leaves `NewSMTPSender` out of `InitializeApp` and its config validation does not run at startup. Once a usecase takes `domain.EmailSender`, an invalid `SMTP_FROM_ADDRESS` or `SMTP_TLS_MODE` stops the app from booting.
 
