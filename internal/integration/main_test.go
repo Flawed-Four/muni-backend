@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -32,6 +33,7 @@ import (
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/database"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/kvstore"
 	"github.com/Flawed-Four/muni-backend/internal/infrastructure/vectorstore"
+	"github.com/Flawed-Four/muni-backend/internal/logging"
 )
 
 var (
@@ -51,6 +53,15 @@ func TestMain(m *testing.M) {
 func run(m *testing.M) int {
 	gin.SetMode(gin.TestMode)
 	testCfg = loadTestConfig()
+
+	// A real default logger (not slog's built-in one) lets captureLogs restore it cleanly.
+	logger, err := logging.New(testCfg, os.Stderr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "integration: %v\n", err)
+		return 1
+	}
+	slog.SetDefault(logger)
+
 	mailpitURL = fmt.Sprintf("http://%s:%d", testCfg.SMTP.Host, getenvInt("TEST_MAILPIT_PORT", 58025))
 	chromaDBURL = fmt.Sprintf("http://%s:%d/api/v2/tenants/%s/databases/%s", testCfg.Chroma.Host, testCfg.Chroma.Port,
 		url.PathEscape(testCfg.Chroma.Tenant), url.PathEscape(testCfg.Chroma.Database))
@@ -101,6 +112,7 @@ func run(m *testing.M) int {
 func loadTestConfig() *config.Config {
 	return &config.Config{
 		App: config.AppConfig{Env: "test", Port: 0},
+		Log: config.LogConfig{Level: getenv("TEST_LOG_LEVEL", "info"), Format: "text"},
 		DB: config.DBConfig{
 			Host:     getenv("TEST_DB_HOST", "localhost"),
 			Port:     getenvInt("TEST_DB_PORT", 55432),

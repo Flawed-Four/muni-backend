@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	App     AppConfig
+	Log     LogConfig
 	DB      DBConfig
 	Session SessionConfig
 	SMTP    SMTPConfig
@@ -21,6 +22,12 @@ type Config struct {
 type AppConfig struct {
 	Env  string `env:"APP_ENV" envDefault:"development"`
 	Port int    `env:"APP_PORT" envDefault:"8080"`
+}
+
+// LogConfig is validated by logging.New.
+type LogConfig struct {
+	Level  string `env:"LOG_LEVEL" envDefault:"info"` // debug, info, warn or error
+	Format string `env:"LOG_FORMAT"`                  // json or text; empty = json in production, text otherwise
 }
 
 type DBConfig struct {
