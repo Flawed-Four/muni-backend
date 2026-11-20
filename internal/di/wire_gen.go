@@ -40,7 +40,7 @@ func InitializeApp(cfg *config.Config) (*App, func(), error) {
 	authHandler := handler.NewAuthHandler(authUsecase)
 	userUsecase := usecase.NewUserUsecase(userRepository)
 	userHandler := handler.NewUserHandler(userUsecase)
-	engine := http.NewRouter(authUsecase, healthHandler, authHandler, userHandler)
+	engine := http.NewRouter(cfg, authUsecase, healthHandler, authHandler, userHandler)
 	server := http.NewServer(cfg, engine)
 	app := &App{
 		Server: server,

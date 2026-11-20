@@ -2,7 +2,6 @@ package response
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -30,8 +29,9 @@ func Abort(c *gin.Context, status int, message string) {
 	c.AbortWithStatusJSON(status, Error{Error: ErrorBody{Message: message}})
 }
 
-// Fail maps a domain error to an HTTP status. Unknown errors are logged and
-// reported as 500 without leaking internals.
+// Fail maps a domain error to an HTTP status. Unknown errors become a 500
+// without leaking internals; the error itself is attached to the context
+// so middleware.RequestLogger writes it in the request's log line.
 func Fail(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
@@ -41,7 +41,7 @@ func Fail(c *gin.Context, err error) {
 	case errors.Is(err, domain.ErrInvalidCredentials), errors.Is(err, domain.ErrInvalidToken):
 		Abort(c, http.StatusUnauthorized, err.Error())
 	default:
-		slog.Error("internal error", "path", c.FullPath(), "err", err)
+		_ = c.Error(err)
 		Abort(c, http.StatusInternalServerError, "internal server error")
 	}
 }

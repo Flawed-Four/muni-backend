@@ -6,19 +6,26 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 
 	_ "github.com/Flawed-Four/muni-backend/docs"
+	"github.com/Flawed-Four/muni-backend/internal/config"
 	"github.com/Flawed-Four/muni-backend/internal/delivery/http/handler"
 	"github.com/Flawed-Four/muni-backend/internal/delivery/http/middleware"
 	"github.com/Flawed-Four/muni-backend/internal/usecase"
 )
 
 func NewRouter(
+	cfg *config.Config,
 	authUC *usecase.AuthUsecase,
 	health *handler.HealthHandler,
 	auth *handler.AuthHandler,
 	user *handler.UserHandler,
 ) *gin.Engine {
+	// Must run before gin.New, which already prints debug output.
+	if cfg.App.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(middleware.RequestLogger(), middleware.Recovery())
 
 	r.GET("/health", health.Check)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
