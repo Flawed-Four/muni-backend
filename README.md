@@ -17,6 +17,7 @@ delivery/http ──► usecase ──► domain ◄── repository/postgres
 - `internal/repository`, `internal/infrastructure` — implementasi interface domain.
 - `internal/delivery/http` — handler Gin, middleware, router, DTO.
 - `internal/di` — wiring dependency dengan Google Wire (`wire.go` → `wire_gen.go`).
+- `internal/logging` — setup logger `slog` dan field per request lewat context (lihat [Logging](#logging)).
 
 ## Menjalankan
 
@@ -56,6 +57,19 @@ Setelah mengubah `db/queries/*.sql` atau skema migrasi jalankan `make sqlc`; set
 | GET | `/api/v1/users/me` | Bearer session token |
 
 Autentikasi bersifat stateful: `login` membuat baris di tabel `sessions` dan mengembalikan token opaque acak (hanya hash SHA-256-nya yang disimpan). Setiap request memeriksa sesi di DB, sehingga logout / revoke langsung berlaku. Masa berlaku diatur lewat `SESSION_TTL` (default `24h`).
+
+## IP klien dan proxy
+
+IP klien diambil dari `c.ClientIP()`, disimpan di `sessions.ip_address` saat login, dan dicatat sebagai `ip` di log request. Secara default aplikasi tidak memercayai proxy mana pun, jadi yang dipakai adalah alamat koneksi TCP. Header `X-Forwarded-For` dan `X-Real-IP` dari klien diabaikan karena isinya bisa dikarang.
+
+Jika aplikasi berjalan di belakang load balancer atau reverse proxy, isi `TRUSTED_PROXIES` dengan IP/CIDR proxy itu. `X-Forwarded-For` hanya dipercaya jika request datang dari alamat tersebut. Yang dipakai adalah alamat paling kanan yang bukan proxy tepercaya, jadi alamat palsu yang ditaruh klien di depan tetap diabaikan.
+
+| Env | Default | Keterangan |
+|---|---|---|
+| `TRUSTED_PROXIES` | kosong | IP/CIDR dipisah koma, misalnya `10.0.0.0/8,172.16.0.0/12`. Kosong berarti tidak ada proxy yang dipercaya. Entri yang tidak valid membuat aplikasi gagal start |
+| `TRUSTED_PLATFORM` | kosong | Nama header berisi IP klien yang diisi platform, misalnya `CF-Connecting-IP` untuk Cloudflare |
+
+`TRUSTED_PLATFORM` dipercaya dari siapa pun, tanpa memeriksa alamat pengirimnya. Jadi header itu hanya aman dipakai jika aplikasi tidak bisa diakses selain lewat platform tersebut (misalnya firewall hanya menerima IP Cloudflare, atau memakai Cloudflare Tunnel). Jika tidak yakin, pakai `TRUSTED_PROXIES` berisi [rentang IP Cloudflare](https://www.cloudflare.com/ips/), karena Cloudflare juga menambahkan IP klien ke `X-Forwarded-For`.
 
 ## Email
 
@@ -159,6 +173,23 @@ Beberapa hal yang perlu diperhatikan:
 | `GEMINI_MAX_RETRIES` | `2` | `0` mematikan retry |
 | `GEMINI_BASE_URL` | kosong | Kosong berarti endpoint Google |
 
+## Logging
+
+Semua log ditulis lewat `log/slog` ke stdout. `main` memasang logger dari `internal/logging` sebagai default, jadi kode di layer mana pun cukup memanggil `slog.InfoContext(ctx, ...)` / `slog.ErrorContext(ctx, ...)`.
+
+- Middleware `RequestLogger` memberi setiap request ID (`X-Request-ID` dari klien dipakai bila formatnya valid, selain itu dibuat baru) dan mengembalikannya di header response.
+- Setiap request menghasilkan **satu** baris log `request` berisi `method`, `route`, `status`, `latency_ms`, `ip`, `request_id`, `user_id` (bila login), dan `err` (bila ada). Asal `ip` dijelaskan di [IP klien dan proxy](#ip-klien-dan-proxy). Status 5xx dicatat sebagai `ERROR`, sisanya `INFO`. `/health` yang sukses tidak dicatat.
+- Log yang ditulis dengan context request otomatis membawa `request_id` dan `user_id`, sehingga bisa dicari bersama di log aggregator.
+- Panic dicatat sebagai `panic recovered` beserta stack trace, lalu dijawab 500.
+- Body request, header `Authorization`, token, password, dan API key tidak pernah dicatat; yang dicatat adalah pola route (`/api/v1/users/me`), bukan URL beserta query string.
+
+| Env | Default | Keterangan |
+|---|---|---|
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, atau `error` |
+| `LOG_FORMAT` | kosong | `json` atau `text`; kosong berarti `json` bila `APP_ENV=production`, selain itu `text` |
+
+Aplikasi tidak mengirim log ke mana pun sendiri. Pengumpulan log terpusat (mis. Grafana Alloy → Loki, atau Cloud Logging) membaca JSON dari stdout container.
+
 ## Testing
 
 Test bersifat integrasi penuh: tanpa mock, berjalan di atas PostgreSQL asli (service `postgres-test` di `docker-compose.yml`, data di tmpfs, port `55432`, terpisah dari DB dev), Mailpit asli (service `mailpit-test`, SMTP di port `51025`, API di `58025`), Redis asli (service `redis-test`, port `56379`), dan Chroma asli (service `chroma-test`, data di tmpfs, port `58000`).
@@ -168,6 +199,7 @@ Test bersifat integrasi penuh: tanpa mock, berjalan di atas PostgreSQL asli (ser
 - Test email membaca hasil pengiriman lewat REST API Mailpit; inbox dikosongkan di awal tiap test.
 - Test Redis mengosongkan Redis test dengan `FLUSHDB` di awal tiap test.
 - Test Chroma menghapus semua collection di database test di awal tiap test.
+- Test logging mengalihkan logger default ke buffer JSON selama test berjalan (`captureLogs`). Log test lain ditulis sebagai teks ke stderr dengan level `TEST_LOG_LEVEL` (default `info`).
 - Port dapat diubah dengan `TEST_DB_PORT`, `TEST_SMTP_PORT`, `TEST_MAILPIT_PORT`, `TEST_REDIS_PORT`, dan `TEST_CHROMA_PORT`; image dengan `POSTGRES_IMAGE`, `REDIS_IMAGE`, dan `CHROMA_IMAGE`.
 - Jika service test belum hidup, test gagal dengan pesan yang menyarankan `make test-db-up` (tidak di-skip diam-diam).
 - Test Gemini memanggil API Gemini asli dan hanya jalan jika `TEST_GEMINI_API_KEY` diisi (model bisa diganti dengan `TEST_GEMINI_MODEL`); tanpa key, test itu di-skip. `GEMINI_API_KEY` dari `.env` sengaja tidak dipakai supaya test tidak memakai key produksi. Contoh: `TEST_GEMINI_API_KEY=... make test`.

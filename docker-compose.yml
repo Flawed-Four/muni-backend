@@ -147,6 +147,11 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_PORT: 8080
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-}
+      # Empty = trust no proxy, so X-Forwarded-For is ignored. See README.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      TRUSTED_PLATFORM: ${TRUSTED_PLATFORM:-}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_USER:-muni}

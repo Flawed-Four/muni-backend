@@ -11,10 +11,6 @@ import (
 )
 
 func NewServer(cfg *config.Config, router *gin.Engine) *http.Server {
-	if cfg.App.Env == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.App.Port),
 		Handler:           router,

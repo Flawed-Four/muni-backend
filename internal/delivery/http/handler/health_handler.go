@@ -37,6 +37,7 @@ func (h *HealthHandler) Check(c *gin.Context) {
 	defer cancel()
 
 	if err := h.db.Ping(ctx); err != nil {
+		_ = c.Error(err) // logged by middleware.RequestLogger
 		response.Abort(c, http.StatusServiceUnavailable, "database unavailable")
 		return
 	}

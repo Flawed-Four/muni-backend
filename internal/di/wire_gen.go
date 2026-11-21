@@ -46,11 +46,18 @@ func InitializeApp(cfg *config.Config) (*App, func(), error) {
 	noteHandler := handler.NewNoteHandler(noteUsecase)
 	noteTagUsecase := usecase.NewNoteTagUsecase(noteRepository, noteTagRepository)
 	noteTagHandler := handler.NewNoteTagHandler(noteTagUsecase)
-	engine := http.NewRouter(authUsecase, healthHandler, authHandler, userHandler, noteHandler, noteTagHandler)
+  
+	engine, err := http.NewRouter(cfg, authUsecase, healthHandler, authHandler, userHandler, noteHandler, noteTagHandler)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+  
 	server := http.NewServer(cfg, engine)
 	app := &App{
 		Server: server,
 	}
+  
 	return app, func() {
 		cleanup()
 	}, nil

@@ -20,6 +20,7 @@ import (
 
 	"github.com/Flawed-Four/muni-backend/internal/config"
 	"github.com/Flawed-Four/muni-backend/internal/di"
+	"github.com/Flawed-Four/muni-backend/internal/logging"
 )
 
 func main() {
@@ -34,6 +35,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
+
+	logger, err := logging.New(cfg, os.Stdout)
+	if err != nil {
+		return err
+	}
+	slog.SetDefault(logger)
 
 	app, cleanup, err := di.InitializeApp(cfg)
 	if err != nil {

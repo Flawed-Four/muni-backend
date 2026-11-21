@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	App     AppConfig
+	Log     LogConfig
 	DB      DBConfig
 	Session SessionConfig
 	SMTP    SMTPConfig
@@ -21,6 +22,18 @@ type Config struct {
 type AppConfig struct {
 	Env  string `env:"APP_ENV" envDefault:"development"`
 	Port int    `env:"APP_PORT" envDefault:"8080"`
+	// TrustedProxies lists the proxy IPs/CIDRs whose X-Forwarded-For is believed.
+	// Empty = trust no proxy, so the client IP is the TCP peer address.
+	TrustedProxies []string `env:"TRUSTED_PROXIES"`
+	// TrustedPlatform is a header that holds the client IP, e.g. CF-Connecting-IP.
+	// It is believed from any peer, so only set it when the platform is the only way in.
+	TrustedPlatform string `env:"TRUSTED_PLATFORM"`
+}
+
+// LogConfig is validated by logging.New.
+type LogConfig struct {
+	Level  string `env:"LOG_LEVEL" envDefault:"info"` // debug, info, warn or error
+	Format string `env:"LOG_FORMAT"`                  // json or text; empty = json in production, text otherwise
 }
 
 type DBConfig struct {

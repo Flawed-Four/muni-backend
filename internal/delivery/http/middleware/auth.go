@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/Flawed-Four/muni-backend/internal/delivery/http/response"
+	"github.com/Flawed-Four/muni-backend/internal/logging"
 	"github.com/Flawed-Four/muni-backend/internal/usecase"
 )
 
@@ -33,6 +35,7 @@ func Auth(auth *usecase.AuthUsecase) gin.HandlerFunc {
 
 		c.Set(userIDKey, userID)
 		c.Set(tokenKey, token)
+		c.Request = c.Request.WithContext(logging.With(c.Request.Context(), slog.String("user_id", userID)))
 		c.Next()
 	}
 }
