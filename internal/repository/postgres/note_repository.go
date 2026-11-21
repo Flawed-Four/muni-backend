@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -31,7 +32,7 @@ func (r *NoteRepository) Create(ctx context.Context, note *domain.Note) (*domain
 		UpdatedAt: note.UpdatedAt,
 	})
 	if err != nil {
-		return nil, mapNoteErr(err)
+		return nil, mapNoteErr(err, "create note")
 	}
 	return toDomainNote(row), nil
 }
@@ -39,7 +40,7 @@ func (r *NoteRepository) Create(ctx context.Context, note *domain.Note) (*domain
 func (r *NoteRepository) GetByID(ctx context.Context, id string) (*domain.Note, error) {
 	row, err := r.q.GetNoteByID(ctx, id)
 	if err != nil {
-		return nil, mapNoteErr(err)
+		return nil, mapNoteErr(err, "get note by id")
 	}
 	return toDomainNote(row), nil
 }
@@ -61,12 +62,12 @@ func (r *NoteRepository) List(ctx context.Context, filter domain.NoteFilter) ([]
 
 	rows, err := r.q.GetNotes(ctx, filterMap)
 	if err != nil {
-		return nil, 0, mapNoteErr(err)
+		return nil, 0, mapNoteErr(err, "list notes")
 	}
 
 	total, err := r.q.CountNotes(ctx, filterMap)
 	if err != nil {
-		return nil, 0, mapNoteErr(err)
+		return nil, 0, mapNoteErr(err, "count notes")
 	}
 
 	notes := make([]*domain.Note, len(rows))
@@ -85,19 +86,19 @@ func (r *NoteRepository) Update(ctx context.Context, note *domain.Note) (*domain
 		UpdatedAt: note.UpdatedAt,
 	})
 	if err != nil {
-		return nil, mapNoteErr(err)
+		return nil, mapNoteErr(err, "update note")
 	}
 	return toDomainNote(row), nil
 }
 
 func (r *NoteRepository) Delete(ctx context.Context, id string) error {
 	if err := r.q.DeleteNote(ctx, id); err != nil {
-		return mapNoteErr(err)
+		return mapNoteErr(err, "delete note")
 	}
 	return nil
 }
 
-func mapNoteErr(err error) error {
+func mapNoteErr(err error, op string) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ErrNotFound
 	}
@@ -108,7 +109,7 @@ func mapNoteErr(err error) error {
 			return domain.ErrNotFound
 		}
 	}
-	return err
+	return fmt.Errorf("%s: %w", op, err)
 }
 
 func toDomainNote(row *sqlc.Note) *domain.Note {

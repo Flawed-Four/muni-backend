@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -29,7 +30,7 @@ func (r *NoteTagRepository) Create(ctx context.Context, tag *domain.NoteTag) (*d
 		Title:  tag.Title,
 	})
 	if err != nil {
-		return nil, mapNoteTagErr(err)
+		return nil, mapNoteTagErr(err, "create note tag")
 	}
 	return toDomainNoteTag(row), nil
 }
@@ -37,7 +38,7 @@ func (r *NoteTagRepository) Create(ctx context.Context, tag *domain.NoteTag) (*d
 func (r *NoteTagRepository) GetByID(ctx context.Context, id string) (*domain.NoteTag, error) {
 	row, err := r.q.GetNoteTagByID(ctx, id)
 	if err != nil {
-		return nil, mapNoteTagErr(err)
+		return nil, mapNoteTagErr(err, "get note tag by id")
 	}
 	return toDomainNoteTag(row), nil
 }
@@ -45,7 +46,7 @@ func (r *NoteTagRepository) GetByID(ctx context.Context, id string) (*domain.Not
 func (r *NoteTagRepository) ListByNoteID(ctx context.Context, noteID string) ([]*domain.NoteTag, error) {
 	rows, err := r.q.GetNoteTagsByNoteID(ctx, noteID)
 	if err != nil {
-		return nil, mapNoteTagErr(err)
+		return nil, mapNoteTagErr(err, "list note tags by note id")
 	}
 	tags := make([]*domain.NoteTag, len(rows))
 	for i := range rows {
@@ -62,7 +63,7 @@ func (r *NoteTagRepository) ListByNoteIDs(ctx context.Context, noteIDs []string)
 
 	rows, err := r.q.GetNoteTagsByNoteIDs(ctx, noteIDs)
 	if err != nil {
-		return nil, mapNoteTagErr(err)
+		return nil, mapNoteTagErr(err, "list note tags by note ids")
 	}
 
 	for i := range rows {
@@ -90,12 +91,12 @@ func (r *NoteTagRepository) List(ctx context.Context, filter domain.NoteTagFilte
 
 	rows, err := r.q.GetNoteTag(ctx, filterMap)
 	if err != nil {
-		return nil, 0, mapNoteTagErr(err)
+		return nil, 0, mapNoteTagErr(err, "list note tags")
 	}
 
 	total, err := r.q.CountNoteTag(ctx, filterMap)
 	if err != nil {
-		return nil, 0, mapNoteTagErr(err)
+		return nil, 0, mapNoteTagErr(err, "count note tags")
 	}
 
 	tags := make([]*domain.NoteTag, len(rows))
@@ -108,26 +109,26 @@ func (r *NoteTagRepository) List(ctx context.Context, filter domain.NoteTagFilte
 
 func (r *NoteTagRepository) Update(ctx context.Context, id string, title string) (*domain.NoteTag, error) {
 	if err := r.q.UpdateNoteTag(ctx, title, id); err != nil {
-		return nil, mapNoteTagErr(err)
+		return nil, mapNoteTagErr(err, "update note tag")
 	}
 	return r.GetByID(ctx, id)
 }
 
 func (r *NoteTagRepository) Delete(ctx context.Context, id string) error {
 	if err := r.q.DeleteNoteTag(ctx, id); err != nil {
-		return mapNoteTagErr(err)
+		return mapNoteTagErr(err, "delete note tag")
 	}
 	return nil
 }
 
 func (r *NoteTagRepository) DeleteByNoteID(ctx context.Context, noteID string) error {
 	if err := r.q.DeleteNoteTagsByNoteID(ctx, noteID); err != nil {
-		return mapNoteTagErr(err)
+		return mapNoteTagErr(err, "delete note tags by note id")
 	}
 	return nil
 }
 
-func mapNoteTagErr(err error) error {
+func mapNoteTagErr(err error, op string) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ErrNotFound
 	}
@@ -140,7 +141,7 @@ func mapNoteTagErr(err error) error {
 			return domain.ErrNotFound
 		}
 	}
-	return err
+	return fmt.Errorf("%s: %w", op, err)
 }
 
 func toDomainNoteTag(row *sqlc.NoteTag) *domain.NoteTag {

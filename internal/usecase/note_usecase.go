@@ -68,13 +68,14 @@ func (u *NoteUsecase) List(ctx context.Context, userID string, filter domain.Not
 		}
 
 		tagsMap, err := u.tags.ListByNoteIDs(ctx, noteIDs)
-		if err == nil {
-			for _, n := range notes {
-				if tags, ok := tagsMap[n.ID]; ok {
-					n.Tags = tags
-				} else {
-					n.Tags = []*domain.NoteTag{}
-				}
+		if err != nil {
+			return nil, 0, err
+		}
+		for _, n := range notes {
+			if tags, ok := tagsMap[n.ID]; ok {
+				n.Tags = tags
+			} else {
+				n.Tags = []*domain.NoteTag{}
 			}
 		}
 	}
@@ -101,11 +102,13 @@ func (u *NoteUsecase) Update(ctx context.Context, userID, id, title, content str
 	}
 
 	tags, err := u.tags.ListByNoteID(ctx, id)
-	if err == nil && tags != nil {
-		updatedNote.Tags = tags
-	} else {
-		updatedNote.Tags = []*domain.NoteTag{}
+	if err != nil {
+		return nil, err
 	}
+	if tags == nil {
+		tags = []*domain.NoteTag{}
+	}
+	updatedNote.Tags = tags
 
 	return updatedNote, nil
 }
