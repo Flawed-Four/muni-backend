@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Flawed-Four/muni-backend/internal/domain"
@@ -32,13 +31,12 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) (*domain.Us
 	if err != nil {
 		// The insert selects the role by title, so no rows means the role does not exist.
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("unknown role %q", u.Role)
+			return nil, fmt.Errorf("create user: unknown role %q", u.Role)
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		if pgCode(err) == pgerrcode.UniqueViolation {
 			return nil, domain.ErrEmailTaken
 		}
-		return nil, err
+		return nil, mapErr(err, "create user")
 	}
 	return toDomain(row, string(u.Role)), nil
 }
@@ -46,7 +44,7 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) (*domain.Us
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	row, err := r.q.GetUserByID(ctx, id)
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, mapErr(err, "get user by id")
 	}
 	return toDomain(row.User, row.Role), nil
 }
@@ -54,21 +52,9 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	row, err := r.q.GetUserByEmail(ctx, email)
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, mapErr(err, "get user by email")
 	}
 	return toDomain(row.User, row.Role), nil
-}
-
-func mapErr(err error) error {
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.ErrNotFound
-	}
-	// An id that is not a valid UUID can never match a row.
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.InvalidTextRepresentation {
-		return domain.ErrNotFound
-	}
-	return err
 }
 
 func toDomain(row sqlc.User, role string) *domain.User {

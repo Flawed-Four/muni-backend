@@ -2,12 +2,8 @@ package postgres
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Flawed-Four/muni-backend/internal/domain"
@@ -129,19 +125,13 @@ func (r *NoteTagRepository) DeleteByNoteID(ctx context.Context, noteID string) e
 }
 
 func mapNoteTagErr(err error, op string) error {
-	if errors.Is(err, pgx.ErrNoRows) {
+	switch pgCode(err) {
+	case pgerrcode.UniqueViolation:
+		return domain.ErrDuplicateTag
+	case pgerrcode.ForeignKeyViolation:
 		return domain.ErrNotFound
 	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case pgerrcode.UniqueViolation:
-			return domain.ErrDuplicateTag
-		case pgerrcode.InvalidTextRepresentation, pgerrcode.ForeignKeyViolation:
-			return domain.ErrNotFound
-		}
-	}
-	return fmt.Errorf("%s: %w", op, err)
+	return mapErr(err, op)
 }
 
 func toDomainNoteTag(row *sqlc.NoteTag) *domain.NoteTag {

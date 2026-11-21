@@ -33,7 +33,7 @@ func (r *SessionRepository) Create(ctx context.Context, s *domain.Session) (*dom
 		ExpiresAt: pgtype.Timestamptz{Time: s.ExpiresAt, Valid: true},
 	})
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, mapErr(err, "create session")
 	}
 	return sessionToDomain(row), nil
 }
@@ -41,18 +41,18 @@ func (r *SessionRepository) Create(ctx context.Context, s *domain.Session) (*dom
 func (r *SessionRepository) Touch(ctx context.Context, tokenHash []byte) (*domain.Session, error) {
 	row, err := r.q.TouchActiveSession(ctx, tokenHash)
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, mapErr(err, "touch session")
 	}
 	return sessionToDomain(row), nil
 }
 
 func (r *SessionRepository) Revoke(ctx context.Context, tokenHash []byte) error {
 	_, err := r.q.RevokeSession(ctx, tokenHash)
-	return err
+	return mapErr(err, "revoke session")
 }
 
 func (r *SessionRepository) RevokeAllForUser(ctx context.Context, userID string) error {
-	return mapErr(r.q.RevokeUserSessions(ctx, userID))
+	return mapErr(r.q.RevokeUserSessions(ctx, userID), "revoke user sessions")
 }
 
 func sessionToDomain(row sqlc.Session) *domain.Session {

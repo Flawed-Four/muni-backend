@@ -87,7 +87,7 @@ func (u *AuthUsecase) Login(ctx context.Context, email, password string, client 
 		ExpiresAt: time.Now().Add(u.ttl),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create session: %w", err)
+		return nil, err
 	}
 	return &Session{Token: token, ExpiresAt: created.ExpiresAt}, nil
 }
