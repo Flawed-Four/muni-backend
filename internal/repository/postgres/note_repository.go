@@ -2,12 +2,8 @@ package postgres
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Flawed-Four/muni-backend/internal/domain"
@@ -99,17 +95,10 @@ func (r *NoteRepository) Delete(ctx context.Context, id string) error {
 }
 
 func mapNoteErr(err error, op string) error {
-	if errors.Is(err, pgx.ErrNoRows) {
+	if pgCode(err) == pgerrcode.ForeignKeyViolation {
 		return domain.ErrNotFound
 	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case pgerrcode.InvalidTextRepresentation, pgerrcode.ForeignKeyViolation:
-			return domain.ErrNotFound
-		}
-	}
-	return fmt.Errorf("%s: %w", op, err)
+	return mapErr(err, op)
 }
 
 func toDomainNote(row *sqlc.Note) *domain.Note {

@@ -41,7 +41,7 @@ delivery/http ──► usecase ──► domain ◄── repository/postgres
 1. `make migrate-create name=...` and write the `up`/`down` SQL.
 2. Add queries to `db/queries/*.sql` → `make sqlc`.
 3. Domain: entity + repository interface (+ new sentinel errors) in `internal/domain`.
-4. Repository in `internal/repository/postgres`: wrap the sqlc queries, map DB errors to domain sentinels, convert sqlc rows with a `toDomain`.
+4. Repository in `internal/repository/postgres`: wrap the sqlc queries, map DB errors with `mapErr(err, "<op>")` from `errors.go` (a table-specific mapper checks its own codes with `pgCode` first, as `mapNoteTagErr` does), convert sqlc rows with a `toDomain`.
 5. Usecase in `internal/usecase`, depending only on domain interfaces.
 6. DTOs in `delivery/http/dto`, handler in `delivery/http/handler`, route in `router.go` (add new handlers to `NewRouter`'s params). New sentinel errors need a case in `response.Fail`.
 7. Register constructors (and `wire.Bind` for interfaces) in `internal/di/wire.go` → `make wire`.
@@ -68,6 +68,7 @@ Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `
 
 - Log only through the `slog` default and always with the request context: `slog.InfoContext(ctx, ...)`, `slog.ErrorContext(ctx, ...)`. The handler from `logging.New` adds `request_id` and `user_id` from the context, so no layer passes them by hand and `usecase` imports nothing beyond stdlib for logging. Don't inject a `*slog.Logger` through Wire and don't add another logging library.
 - `middleware.RequestLogger` writes exactly one `request` line per request (5xx → ERROR, else INFO; a successful `/health` is skipped). Don't log the same failure again in a handler: attach it with `c.Error(err)` (as `response.Fail` does for unknown errors) and it lands in that line as `err`.
+- Repositories, usecases and infrastructure don't log errors; they return them, and an error that is not a domain sentinel is wrapped with the operation that failed (`mapErr(err, "list notes")` in repositories, `"redis set: %w"` style in infrastructure). That text is all the request line shows. Each layer adds only context the layer below did not already give, so a usecase passes a repository error on unchanged. A usecase logs only an error it deliberately swallows (best-effort work) or work outside a request (a job or worker), where no `RequestLogger` runs.
 - `middleware.Auth` adds `user_id` to the context; a new middleware that learns something request-wide does the same with `logging.With`.
 - Never log request bodies, the `Authorization` header, session tokens, passwords, API keys or `DBConfig.DSN()`. Log the route pattern (`c.FullPath()`), never the raw URL, so query strings stay out.
 - `X-Request-ID` from the client is reused only if it is ≤ 64 chars of `[A-Za-z0-9._-]`; otherwise a new one is generated. It is echoed in the response so a user can quote it.
