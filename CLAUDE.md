@@ -25,10 +25,10 @@ Clean architecture; dependencies point inward:
 ```
 delivery/http ──► usecase ──► domain ◄── repository/postgres
                                  ▲
-                                 └── infrastructure (session tokens, bcrypt, pgx pool, SMTP, Redis, Chroma)
+                                 └── infrastructure (session tokens, bcrypt, pgx pool, SMTP, Redis, Chroma, Gemini)
 ```
 
-- `internal/domain` holds entities, the interfaces (`UserRepository`, `SessionRepository`, `TokenService`, `PasswordHasher`, `EmailSender`, `KeyValueStore`, `VectorStore`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
+- `internal/domain` holds entities, the interfaces (`UserRepository`, `SessionRepository`, `TokenService`, `PasswordHasher`, `EmailSender`, `KeyValueStore`, `VectorStore`, `LanguageModel`) and sentinel errors. It must not import other internal packages. `usecase` imports only `domain`.
 - Errors flow upward as domain sentinels (`ErrNotFound`, `ErrEmailTaken`, `ErrInvalidCredentials`, `ErrInvalidToken`). Repositories translate DB errors into them (unique violation → `ErrEmailTaken`; no rows and malformed UUID → `ErrNotFound`). Match Postgres error codes with `errors.As(err, &*pgconn.PgError)` and the constants from `github.com/jackc/pgerrcode` (e.g. `pgerrcode.UniqueViolation`) — never string literals like `"23505"` or new local constants. `delivery/http/response.Fail` is the single place mapping them to HTTP status; unknown errors become a logged 500.
 - Handlers wrap payloads as `{"data": ...}` / `{"error": {"message": ...}}`.
 - `internal/di/wire.go` (build tag `wireinject`) defines provider sets per layer; `wire_gen.go` is the generated result. `App` (in `app.go`) holds the `*http.Server`. A new interface binding needs a `wire.Bind` in the same set as the concrete provider (e.g. `handler.Pinger` ← `*pgxpool.Pool` is bound in `infraSet`), otherwise Wire fails.
@@ -59,9 +59,9 @@ delivery/http ──► usecase ──► domain ◄── repository/postgres
 
 ## Testing
 
-All tests are integration tests in `internal/integration` against a real PostgreSQL, a real Mailpit, a real Redis and a real Chroma (compose services `postgres-test`, `mailpit-test`, `redis-test` and `chroma-test`, profile `test`) — **no mocks**; keep it that way. `TestMain` applies the real migrations with golang-migrate, then builds the HTTP handler via `di.InitializeApp`, i.e. the production Wire graph. Tests call `resetDB(t)` (TRUNCATE) first, email tests call `resetMail(t)` and read the result through Mailpit's REST API, Redis tests call `resetRedis(t)` (FLUSHDB), and Chroma tests call `resetChroma(t)` (deletes every collection in the test database). They run sequentially because they share one DB, one inbox, one Redis and one Chroma, so don't add `t.Parallel()` or a second package that uses them. If any service is down the suite fails (it does not skip). Override with `TEST_DB_PORT` / `TEST_SMTP_PORT` / `TEST_MAILPIT_PORT` / `TEST_REDIS_PORT` / `TEST_CHROMA_PORT` / `POSTGRES_IMAGE` / `REDIS_IMAGE` / `CHROMA_IMAGE`.
+All tests are integration tests in `internal/integration` against a real PostgreSQL, a real Mailpit, a real Redis, a real Chroma and the real Gemini API (compose services `postgres-test`, `mailpit-test`, `redis-test` and `chroma-test`, profile `test`) — **no mocks**; keep it that way. `TestMain` applies the real migrations with golang-migrate, then builds the HTTP handler via `di.InitializeApp`, i.e. the production Wire graph. Tests call `resetDB(t)` (TRUNCATE) first, email tests call `resetMail(t)` and read the result through Mailpit's REST API, Redis tests call `resetRedis(t)` (FLUSHDB), and Chroma tests call `resetChroma(t)` (deletes every collection in the test database). They run sequentially because they share one DB, one inbox, one Redis and one Chroma, so don't add `t.Parallel()` or a second package that uses them. If any service is down the suite fails (it does not skip). The one exception is Gemini: it is a paid API that cannot run in compose, so live Gemini tests skip unless `TEST_GEMINI_API_KEY` is set (`TEST_GEMINI_MODEL` overrides the model). Tests never read `GEMINI_API_KEY`, so a key in `.env` is not billed. Override with `TEST_DB_PORT` / `TEST_SMTP_PORT` / `TEST_MAILPIT_PORT` / `TEST_REDIS_PORT` / `TEST_CHROMA_PORT` / `POSTGRES_IMAGE` / `REDIS_IMAGE` / `CHROMA_IMAGE`.
 
-Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `SMTPSender` are not covered there beyond checking that `starttls` refuses to fall back to plaintext. The same goes for `redis-test` and `NewRedisClient`, and for `chroma-test` and `NewChromaStore` (no TLS, no API key): only the refusal to fall back from TLS is covered. The Chroma timeout test uses a local TCP listener that never answers, because Chroma cannot be stalled on purpose; it checks the client, not Chroma.
+Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `SMTPSender` are not covered there beyond checking that `starttls` refuses to fall back to plaintext. The same goes for `redis-test` and `NewRedisClient`, and for `chroma-test` and `NewChromaStore` (no TLS, no API key): only the refusal to fall back from TLS is covered. The Chroma timeout test uses a local TCP listener that never answers, because Chroma cannot be stalled on purpose; it checks the client, not Chroma. The Gemini timeout test does the same through `GEMINI_BASE_URL` (`stalledServer` in `main_test.go`).
 
 ## Gotchas
 
@@ -92,3 +92,15 @@ Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `
 - `Query` is approximate (HNSW). Real embeddings get near-perfect recall, but tests use tiny 2-D vectors, where a record written in a random order (e.g. concurrently) can be stored yet never returned. Tests that check what was written should count through the API (`chromaCount`), not through `Query`; query tests write sequentially and keep record counts small.
 
 - A collection shared by several users must be filtered by owner on every `Query` (owner in `Metadata` and in `Where`). `Delete` with no IDs and `DeleteWhere` with an empty filter never reach the server, so a missing filter cannot wipe a collection.
+
+- `domain.LanguageModel` is bound in `infraSet` with no consumer yet, so Wire leaves `llm.NewGemini` out of `InitializeApp` and the app needs no Gemini key. Once a usecase takes it, the app calls `Models.Get` for `GEMINI_MODEL` at boot and refuses to start with a missing or rejected key or an unknown model.
+
+- `llm.Gemini` uses the Interactions API (`client.Interactions.Create`), not the legacy `GenerateContent`, with `store=true`: Google keeps the conversation (55 days paid tier, 1 day free tier), so a turn sends only new input plus `PreviousID`, and thought signatures are handled server-side. An old `PreviousID` stops working after that. `System`, `Tools` and `ResponseSchema` are not inherited and must be sent on every call.
+
+- One `Generate` is one model step. When `FunctionCalls` is non-empty the caller runs them and calls `Generate` again with `PreviousID` and `FunctionResults`; there is no automatic loop.
+
+- Function results go to Gemini as JSON text because the SDK's object form (`FunctionResultStepResult`) has no fields and would drop the result.
+
+- Audio is sent inline only (base64). The raw total per request is capped at 14 MB so the request stays under Gemini's 20 MB limit. MIME parameters are stripped and common aliases (`audio/mp4`, `audio/x-wav`, ...) are mapped before checking the SDK's list.
+
+- The Interactions client retries 408/409/429/5xx and connection errors up to `GEMINI_MAX_RETRIES`. A retried create can be billed and stored twice. `GEMINI_TIMEOUT` is the `http.Client` timeout, so it bounds each attempt, not the whole retry loop.

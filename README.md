@@ -132,6 +132,33 @@ Beberapa hal yang perlu diperhatikan:
 
 Chroma lokal dari `make docker-up` berjalan tanpa auth, jadi port-nya hanya dibuka di `127.0.0.1`. Datanya disimpan di volume `chromadata`. Image diambil dari `ghcr.io/chroma-core/chroma` dan bisa diganti lewat `CHROMA_IMAGE`.
 
+## Gemini (LLM)
+
+Pemanggilan LLM lewat interface `domain.LanguageModel`, diimplementasikan di `internal/infrastructure/llm` dengan Interactions API dari SDK resmi `google.golang.org/genai`. Input bisa teks dan/atau audio, output berupa teks. Mendukung function calling dan structured output (JSON Schema). Model default `gemini-3.5-flash-lite` dan thinking `low`; keduanya bisa diganti per request lewat `LLMRequest.Model` dan `LLMRequest.Thinking`. Implementasinya sudah terdaftar di Wire, tetapi belum ada fitur yang memakainya. Begitu ada yang memakainya, aplikasi gagal start jika API key ditolak atau modelnya tidak ada.
+
+Cara pakai dari usecase:
+
+1. Panggil `Generate` dengan `Input` (teks/audio), dan bila perlu `System`, `Tools`, serta `ResponseSchema`.
+2. Jika `FunctionCalls` tidak kosong, jalankan fungsinya, lalu panggil `Generate` lagi dengan `PreviousID` = `ID` response tadi dan hasilnya di `FunctionResults`. Ulangi sampai tidak ada function call.
+3. Untuk turn berikutnya, cukup kirim input baru dengan `PreviousID`.
+
+Beberapa hal yang perlu diperhatikan:
+
+- **Percakapan disimpan di Google** (`store=true`): 55 hari di tier berbayar, 1 hari di tier gratis. Setelah itu `PreviousID` tidak berlaku lagi, jadi riwayat jangka panjang tetap harus disimpan sendiri.
+- **`System`, `Tools`, dan `ResponseSchema` dikirim ulang di setiap panggilan**; nilai dari turn sebelumnya tidak terbawa.
+- **Audio dikirim inline**, maksimal sekitar 14 MB data mentah per request (batas request Gemini 20 MB setelah base64). Format: wav, mp3, aiff, aac, ogg, flac, mpeg, m4a, l16, opus, alaw, mulaw, webm; parameter seperti `audio/webm;codecs=opus` dan nama alternatif seperti `audio/mp4` (Safari) diterima. Audio dihitung 32 token per detik.
+- **Hasil fungsi dikirim sebagai teks JSON**, jadi `Result` boleh berupa nilai apa pun yang bisa di-`json.Marshal`.
+- Request yang gagal karena 408/409/429/5xx diulang sampai `GEMINI_MAX_RETRIES` kali. Jika server sebenarnya sudah memproses request pertama, interaksinya bisa tercatat dua kali.
+
+| Env | Default | Keterangan |
+|---|---|---|
+| `GEMINI_API_KEY` | kosong | Dari [Google AI Studio](https://aistudio.google.com/apikey) |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model default, dicek saat start |
+| `GEMINI_THINKING_LEVEL` | `low` | `minimal`, `low`, `medium`, atau `high` |
+| `GEMINI_TIMEOUT` | `120s` | Batas tiap percobaan HTTP, juga pengecekan saat start |
+| `GEMINI_MAX_RETRIES` | `2` | `0` mematikan retry |
+| `GEMINI_BASE_URL` | kosong | Kosong berarti endpoint Google |
+
 ## Testing
 
 Test bersifat integrasi penuh: tanpa mock, berjalan di atas PostgreSQL asli (service `postgres-test` di `docker-compose.yml`, data di tmpfs, port `55432`, terpisah dari DB dev), Mailpit asli (service `mailpit-test`, SMTP di port `51025`, API di `58025`), Redis asli (service `redis-test`, port `56379`), dan Chroma asli (service `chroma-test`, data di tmpfs, port `58000`).
@@ -143,3 +170,4 @@ Test bersifat integrasi penuh: tanpa mock, berjalan di atas PostgreSQL asli (ser
 - Test Chroma menghapus semua collection di database test di awal tiap test.
 - Port dapat diubah dengan `TEST_DB_PORT`, `TEST_SMTP_PORT`, `TEST_MAILPIT_PORT`, `TEST_REDIS_PORT`, dan `TEST_CHROMA_PORT`; image dengan `POSTGRES_IMAGE`, `REDIS_IMAGE`, dan `CHROMA_IMAGE`.
 - Jika service test belum hidup, test gagal dengan pesan yang menyarankan `make test-db-up` (tidak di-skip diam-diam).
+- Test Gemini memanggil API Gemini asli dan hanya jalan jika `TEST_GEMINI_API_KEY` diisi (model bisa diganti dengan `TEST_GEMINI_MODEL`); tanpa key, test itu di-skip. `GEMINI_API_KEY` dari `.env` sengaja tidak dipakai supaya test tidak memakai key produksi. Contoh: `TEST_GEMINI_API_KEY=... make test`.
