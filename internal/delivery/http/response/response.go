@@ -36,10 +36,12 @@ func Fail(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		Abort(c, http.StatusNotFound, err.Error())
-	case errors.Is(err, domain.ErrEmailTaken):
+	case errors.Is(err, domain.ErrEmailTaken), errors.Is(err, domain.ErrDuplicateTag):
 		Abort(c, http.StatusConflict, err.Error())
 	case errors.Is(err, domain.ErrInvalidCredentials), errors.Is(err, domain.ErrInvalidToken):
 		Abort(c, http.StatusUnauthorized, err.Error())
+	case errors.Is(err, domain.ErrForbidden):
+		Abort(c, http.StatusForbidden, err.Error())
 	default:
 		_ = c.Error(err)
 		Abort(c, http.StatusInternalServerError, "internal server error")
