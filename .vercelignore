@@ -1,0 +1,6 @@
+# Local secrets and build output stay out of the upload.
+.env
+.env.*
+/bin/
+.claude/
+.idea/
