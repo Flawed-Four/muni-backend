@@ -31,6 +31,38 @@ Swagger UI: http://localhost:8080/swagger/index.html
 
 Mailpit UI: http://localhost:8025
 
+`PORT`, jika diisi, menggantikan `APP_PORT`. Platform seperti Vercel mengisinya sendiri.
+
+## Deploy ke Vercel
+
+Vercel menjalankan `cmd/api/main.go` sebagai server Go biasa. `vercel.json` memilih preset `go` (masih [Beta](https://vercel.com/docs/functions/runtimes/go)) dan region `sin1` (Singapura). `Dockerfile` tidak dipakai, dan `.vercelignore` menjaga `.env` tidak ikut terunggah.
+
+1. Siapkan PostgreSQL yang bisa diakses dari internet, misalnya Neon atau Supabase.
+2. Jalankan migrasi dengan koneksi langsung (bukan pooler). Aplikasi tidak menjalankannya sendiri.
+
+   ```bash
+   make migrate-up DB_URL="postgres://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require"
+   ```
+
+3. Import repo di Vercel, lalu isi environment variable:
+
+   | Env | Nilai |
+   |---|---|
+   | `APP_ENV` | `production` |
+   | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | dari penyedia database |
+   | `DB_SSLMODE` | `require` |
+   | `TRUSTED_PLATFORM` | `X-Real-IP` |
+
+4. Samakan `regions` di `vercel.json` dengan region database.
+5. Setelah deploy, cek `/health`.
+
+Yang perlu diperhatikan:
+
+- **Koneksi database.** Setiap instance punya pool sendiri, jadi pakai connection pooler. Pooler mode *transaction* bisa bentrok dengan prepared statement bawaan pgx; pastikan penyedianya mendukung, atau pakai mode *session*.
+- **IP klien.** Vercel mengisi `X-Real-IP` dengan IP klien ([request headers](https://vercel.com/docs/headers/request-headers)). Jangan pakai nilai ini di hosting lain (lihat [IP klien dan proxy](#ip-klien-dan-proxy)).
+- **Batas request.** Body request dan response maksimal 4,5 MB ([limits](https://vercel.com/docs/functions/limitations)).
+- **Layanan lain.** Redis, Chroma, SMTP, dan Gemini belum dipakai fitur mana pun. Saat mulai dipakai, semuanya harus berupa layanan eksternal.
+
 ## Perintah
 
 | Perintah | Fungsi |

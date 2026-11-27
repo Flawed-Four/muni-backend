@@ -25,6 +25,8 @@ type Config struct {
 type AppConfig struct {
 	Env  string `env:"APP_ENV" envDefault:"development"`
 	Port int    `env:"APP_PORT" envDefault:"8080"`
+	// PlatformPort is set by hosts such as Vercel. When set, it replaces Port.
+	PlatformPort int `env:"PORT"`
 	// TrustedProxies lists the proxy IPs/CIDRs whose X-Forwarded-For is believed.
 	// Empty = trust no proxy, so the client IP is the TCP peer address.
 	TrustedProxies []string `env:"TRUSTED_PROXIES"`
@@ -118,6 +120,9 @@ func Load() (*Config, error) {
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
+	}
+	if cfg.App.PlatformPort != 0 {
+		cfg.App.Port = cfg.App.PlatformPort
 	}
 	return &cfg, nil
 }
