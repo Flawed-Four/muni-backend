@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,6 +142,8 @@ func TestRegisterValidation(t *testing.T) {
 		"invalid email":  {Name: "A", Email: "not-an-email", Password: "s3cretpass"},
 		"short password": {Name: "A", Email: "a@example.com", Password: "short"},
 		"long password":  {Name: "A", Email: "a@example.com", Password: string(make([]byte, 73))},
+		// 40 characters but 80 bytes: within max=72 characters, over bcrypt's 72 bytes.
+		"multibyte password over 72 bytes": {Name: "A", Email: "a@example.com", Password: strings.Repeat("é", 40)},
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {

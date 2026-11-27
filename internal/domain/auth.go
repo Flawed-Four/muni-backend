@@ -10,6 +10,7 @@ type TokenService interface {
 }
 
 // PasswordHasher hashes passwords and compares them with stored hashes.
+// Hash returns ErrPasswordTooLong for a password it cannot use in full.
 type PasswordHasher interface {
 	Hash(password string) (string, error)
 	Compare(hash, password string) error

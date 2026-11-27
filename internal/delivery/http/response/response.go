@@ -34,6 +34,8 @@ func Abort(c *gin.Context, status int, message string) {
 // so middleware.RequestLogger writes it in the request's log line.
 func Fail(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, domain.ErrPasswordTooLong):
+		Abort(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, domain.ErrNotFound):
 		Abort(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, domain.ErrEmailTaken), errors.Is(err, domain.ErrDuplicateTag):
