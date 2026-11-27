@@ -67,7 +67,7 @@ Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `
 ## Logging
 
 - Log only through the `slog` default and always with the request context: `slog.InfoContext(ctx, ...)`, `slog.ErrorContext(ctx, ...)`. The handler from `logging.New` adds `request_id` and `user_id` from the context, so no layer passes them by hand and `usecase` imports nothing beyond stdlib for logging. Don't inject a `*slog.Logger` through Wire and don't add another logging library.
-- `middleware.RequestLogger` writes exactly one `request` line per request (5xx → ERROR, else INFO; a successful `/health` is skipped). Don't log the same failure again in a handler: attach it with `c.Error(err)` (as `response.Fail` does for unknown errors) and it lands in that line as `err`.
+- `middleware.RequestLogger` writes exactly one `request` line per request (5xx → ERROR, else INFO; a successful `/api/v1/health` is skipped). Don't log the same failure again in a handler: attach it with `c.Error(err)` (as `response.Fail` does for unknown errors) and it lands in that line as `err`.
 - Repositories, usecases and infrastructure don't log errors; they return them, and an error that is not a domain sentinel is wrapped with the operation that failed (`mapErr(err, "list notes")` in repositories, `"redis set: %w"` style in infrastructure). That text is all the request line shows. Each layer adds only context the layer below did not already give, so a usecase passes a repository error on unchanged. A usecase logs only an error it deliberately swallows (best-effort work) or work outside a request (a job or worker), where no `RequestLogger` runs.
 - `middleware.Auth` adds `user_id` to the context; a new middleware that learns something request-wide does the same with `logging.With`.
 - Never log request bodies, the `Authorization` header, session tokens, passwords, API keys or `DBConfig.DSN()`. Log the route pattern (`c.FullPath()`), never the raw URL, so query strings stay out.
@@ -87,13 +87,13 @@ Mailpit in the suite runs plaintext without auth, so the TLS and AUTH paths of `
 
 - `EmailSender.Send` is synchronous and opens a new connection per call, so calling it from a request path adds the SMTP round trip to the response time.
 
-- `domain.KeyValueStore` is likewise bound in `infraSet` with no consumer yet, so Wire leaves `NewRedisClient` out of `InitializeApp` and the app neither connects to Redis nor needs it. Once a usecase takes `domain.KeyValueStore` (or anything takes `*redis.Client`), the app pings Redis at boot and refuses to start without it. `/health` does not check Redis.
+- `domain.KeyValueStore` is likewise bound in `infraSet` with no consumer yet, so Wire leaves `NewRedisClient` out of `InitializeApp` and the app neither connects to Redis nor needs it. Once a usecase takes `domain.KeyValueStore` (or anything takes `*redis.Client`), the app pings Redis at boot and refuses to start without it. `/api/v1/health` does not check Redis.
 
 - `KeyValueStore` rejects a non-positive TTL because go-redis reads `0` as "never expire" and `-1` as "keep the current TTL". `Incr` has to stay a single transaction for the same reason: a counter left without a TTL would lock its subject out for good.
 
 - OTP codes and rate-limit counters share Redis with cache entries, so a production Redis with `maxmemory` must run `noeviction`. An evicting policy can drop them under memory pressure, which invalidates a pending code or resets a limit.
 
-- `domain.VectorStore` is bound in `infraSet` with no consumer yet, so Wire leaves `NewChromaStore` out of `InitializeApp` and the app neither connects to Chroma nor needs it. Once a usecase takes `domain.VectorStore`, the app checks Chroma's heartbeat and the configured tenant/database at boot and refuses to start without them. `/health` does not check Chroma.
+- `domain.VectorStore` is bound in `infraSet` with no consumer yet, so Wire leaves `NewChromaStore` out of `InitializeApp` and the app neither connects to Chroma nor needs it. Once a usecase takes `domain.VectorStore`, the app checks Chroma's heartbeat and the configured tenant/database at boot and refuses to start without them. `/api/v1/health` does not check Chroma.
 
 - `ChromaStore` is a thin `net/http` client for the Chroma REST API v2, not `chroma-go`: that library creates a default ONNX embedding function (downloading onnxruntime and a model at runtime) whenever a collection is created without one, which fails in the distroless/static image. Chroma computes no embeddings itself here, so callers pass vectors.
 
