@@ -2,7 +2,6 @@ package sqlc
 
 import (
 	"context"
-	"fmt"
 )
 
 type CreateNoteTagParams struct {
@@ -23,88 +22,6 @@ func (q *Queries) CreateNoteTag(ctx context.Context, arg CreateNoteTagParams) (*
 	}
 
 	return &n, nil
-}
-
-func (q *Queries) GetNoteTag(ctx context.Context, filter map[string]interface{}) ([]NoteTag, error) {
-	query := `-- name: GetNoteTag :many
-				SELECT id, notes_id, title
-				FROM note_tags
-				WHERE 1=1`
-
-	var args []interface{}
-	if noteID, ok := filter["notes_id"].(string); ok && noteID != "" {
-		args = append(args, noteID)
-		query += fmt.Sprintf(` AND notes_id = $%d`, len(args))
-	} else if noteID, ok := filter["note_id"].(string); ok && noteID != "" {
-		args = append(args, noteID)
-		query += fmt.Sprintf(` AND notes_id = $%d`, len(args))
-	}
-
-	if title, ok := filter["title"].(string); ok && title != "" {
-		args = append(args, title)
-		query += fmt.Sprintf(` AND title = $%d`, len(args))
-	}
-
-	query += ` ORDER BY title ASC`
-
-	if limit, ok := filter["limit"].(int); ok && limit > 0 {
-		args = append(args, limit)
-		query += fmt.Sprintf(` LIMIT $%d`, len(args))
-	}
-
-	if offset, ok := filter["offset"].(int); ok && offset > 0 {
-		args = append(args, offset)
-		query += fmt.Sprintf(` OFFSET $%d`, len(args))
-	}
-
-	rows, err := q.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var n []NoteTag
-	for rows.Next() {
-		var v NoteTag
-		if err := rows.Scan(&v.ID, &v.NotesID, &v.Title); err != nil {
-			return nil, err
-		}
-		n = append(n, v)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return n, nil
-}
-
-func (q *Queries) CountNoteTag(ctx context.Context, filter map[string]interface{}) (int, error) {
-	query := `-- name: CountNoteTag :one
-				SELECT COUNT(id)
-				FROM note_tags
-				WHERE 1=1`
-
-	var args []interface{}
-	if noteID, ok := filter["notes_id"].(string); ok && noteID != "" {
-		args = append(args, noteID)
-		query += fmt.Sprintf(` AND notes_id = $%d`, len(args))
-	} else if noteID, ok := filter["note_id"].(string); ok && noteID != "" {
-		args = append(args, noteID)
-		query += fmt.Sprintf(` AND notes_id = $%d`, len(args))
-	}
-
-	if title, ok := filter["title"].(string); ok && title != "" {
-		args = append(args, title)
-		query += fmt.Sprintf(` AND title = $%d`, len(args))
-	}
-
-	var n int
-	if err := q.db.QueryRow(ctx, query, args...).Scan(&n); err != nil {
-		return 0, err
-	}
-
-	return n, nil
 }
 
 func (q *Queries) GetNoteTagByID(ctx context.Context, id string) (*NoteTag, error) {

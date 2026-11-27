@@ -95,5 +95,6 @@ func (u *NoteTagUsecase) List(ctx context.Context, userID string, filter domain.
 		}
 	}
 
+	filter.UserID = userID
 	return u.tags.List(ctx, filter)
 }

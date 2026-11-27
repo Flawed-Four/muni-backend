@@ -137,6 +137,69 @@ func TestNotesOwnership(t *testing.T) {
 	}
 }
 
+func TestNoteTagsOwnership(t *testing.T) {
+	resetDB(t)
+
+	register(t, "Alice", "alice@example.com", "s3cretpass")
+	aliceToken := login(t, "alice@example.com", "s3cretpass")
+	register(t, "Bob", "bob@example.com", "s3cretpass")
+	bobToken := login(t, "bob@example.com", "s3cretpass")
+
+	createTag := func(token, noteTitle, tagTitle string) (dto.NoteResponse, dto.NoteTagResponse) {
+		t.Helper()
+		rec := do(t, http.MethodPost, "/api/v1/notes", dto.CreateNoteRequest{Title: noteTitle, Content: "Content"}, token)
+		wantStatus(t, rec, http.StatusCreated)
+		note := data[dto.NoteResponse](t, rec)
+		rec = do(t, http.MethodPost, "/api/v1/tags", dto.CreateNoteTagRequest{NoteID: note.ID, Title: tagTitle}, token)
+		wantStatus(t, rec, http.StatusCreated)
+		return note, data[dto.NoteTagResponse](t, rec)
+	}
+	aliceNote, aliceTag := createTag(aliceToken, "Alice Private Note", "salary")
+	_, bobTag := createTag(bobToken, "Bob Note", "shared")
+	// Same title on Alice's note, so a title filter must not cross users either.
+	rec := do(t, http.MethodPost, "/api/v1/tags", dto.CreateNoteTagRequest{NoteID: aliceNote.ID, Title: "shared"}, aliceToken)
+	wantStatus(t, rec, http.StatusCreated)
+
+	listTags := func(token, query string) []dto.NoteTagResponse {
+		t.Helper()
+		rec := do(t, http.MethodGet, "/api/v1/tags"+query, nil, token)
+		wantStatus(t, rec, http.StatusOK)
+		return data[[]dto.NoteTagResponse](t, rec)
+	}
+
+	if tags := listTags(bobToken, ""); len(tags) != 1 || tags[0].ID != bobTag.ID {
+		t.Fatalf("Bob should see only his own tag, got %+v", tags)
+	}
+	if tags := listTags(bobToken, "?title=salary"); len(tags) != 0 {
+		t.Fatalf("Bob should not find Alice's tag by title, got %+v", tags)
+	}
+	if tags := listTags(bobToken, "?title=shared"); len(tags) != 1 || tags[0].ID != bobTag.ID {
+		t.Fatalf("Bob's title filter should match only his tag, got %+v", tags)
+	}
+	if tags := listTags(aliceToken, ""); len(tags) != 2 {
+		t.Fatalf("Alice should see her 2 tags, got %+v", tags)
+	}
+
+	rec = do(t, http.MethodGet, "/api/v1/tags?note_id="+aliceNote.ID, nil, bobToken)
+	wantStatus(t, rec, http.StatusNotFound)
+	rec = do(t, http.MethodGet, "/api/v1/notes/"+aliceNote.ID+"/tags", nil, bobToken)
+	wantStatus(t, rec, http.StatusNotFound)
+	rec = do(t, http.MethodPost, "/api/v1/tags", dto.CreateNoteTagRequest{NoteID: aliceNote.ID, Title: "hacked"}, bobToken)
+	wantStatus(t, rec, http.StatusNotFound)
+	rec = do(t, http.MethodGet, "/api/v1/tags/"+aliceTag.ID, nil, bobToken)
+	wantStatus(t, rec, http.StatusNotFound)
+	rec = do(t, http.MethodPut, "/api/v1/tags/"+aliceTag.ID, dto.UpdateNoteTagRequest{Title: "hacked"}, bobToken)
+	wantStatus(t, rec, http.StatusNotFound)
+	rec = do(t, http.MethodDelete, "/api/v1/tags/"+aliceTag.ID, nil, bobToken)
+	wantStatus(t, rec, http.StatusNotFound)
+
+	rec = do(t, http.MethodGet, "/api/v1/tags/"+aliceTag.ID, nil, aliceToken)
+	wantStatus(t, rec, http.StatusOK)
+	if got := data[dto.NoteTagResponse](t, rec); got.Title != "salary" {
+		t.Fatalf("Alice's tag changed: %+v", got)
+	}
+}
+
 func TestNoteTagsCRUD(t *testing.T) {
 	resetDB(t)
 
