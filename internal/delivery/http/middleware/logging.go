@@ -35,7 +35,7 @@ func RequestLogger() gin.HandlerFunc {
 
 		status := c.Writer.Status()
 		route := c.FullPath() // the pattern, not the raw URL, so query strings never reach the log
-		if route == "/health" && status < http.StatusInternalServerError {
+		if route == "/api/v1/health" && status < http.StatusInternalServerError {
 			return
 		}
 

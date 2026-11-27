@@ -38,11 +38,11 @@ func NewRouter(
 	r.TrustedPlatform = strings.TrimSpace(cfg.App.TrustedPlatform)
 	r.Use(middleware.RequestLogger(), middleware.Recovery())
 
-	r.GET("/health", health.Check)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := r.Group("/api/v1")
 	{
+		v1.GET("/health", health.Check)
 		v1.POST("/auth/register", auth.Register)
 		v1.POST("/auth/login", auth.Login)
 

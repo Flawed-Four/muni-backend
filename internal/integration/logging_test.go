@@ -167,7 +167,7 @@ func TestRequestIDGeneratedWhenMissingOrInvalid(t *testing.T) {
 
 func TestHealthCheckNotLogged(t *testing.T) {
 	logs := captureLogs(t)
-	wantStatus(t, do(t, http.MethodGet, "/health", nil, ""), http.StatusOK)
+	wantStatus(t, do(t, http.MethodGet, "/api/v1/health", nil, ""), http.StatusOK)
 	if logs.Len() != 0 {
 		t.Fatalf("successful health check was logged:\n%s", logs.String())
 	}

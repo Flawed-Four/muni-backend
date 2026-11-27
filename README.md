@@ -54,7 +54,7 @@ Vercel menjalankan `cmd/api/main.go` sebagai server Go biasa. `vercel.json` memi
    | `TRUSTED_PLATFORM` | `X-Real-IP` |
 
 4. Samakan `regions` di `vercel.json` dengan region database.
-5. Setelah deploy, cek `/health`.
+5. Setelah deploy, cek `/api/v1/health`.
 
 Yang perlu diperhatikan:
 
@@ -81,7 +81,7 @@ Setelah mengubah `db/queries/*.sql` atau skema migrasi jalankan `make sqlc`; set
 
 | Method | Path | Auth |
 |---|---|---|
-| GET | `/health` | – |
+| GET | `/api/v1/health` | – |
 | POST | `/api/v1/auth/register` | – |
 | POST | `/api/v1/auth/login` | – |
 | POST | `/api/v1/auth/logout` | Bearer session token |
@@ -210,7 +210,7 @@ Beberapa hal yang perlu diperhatikan:
 Semua log ditulis lewat `log/slog` ke stdout. `main` memasang logger dari `internal/logging` sebagai default, jadi kode di layer mana pun cukup memanggil `slog.InfoContext(ctx, ...)` / `slog.ErrorContext(ctx, ...)`.
 
 - Middleware `RequestLogger` memberi setiap request ID (`X-Request-ID` dari klien dipakai bila formatnya valid, selain itu dibuat baru) dan mengembalikannya di header response.
-- Setiap request menghasilkan **satu** baris log `request` berisi `method`, `route`, `status`, `latency_ms`, `ip`, `request_id`, `user_id` (bila login), dan `err` (bila ada). Asal `ip` dijelaskan di [IP klien dan proxy](#ip-klien-dan-proxy). Status 5xx dicatat sebagai `ERROR`, sisanya `INFO`. `/health` yang sukses tidak dicatat.
+- Setiap request menghasilkan **satu** baris log `request` berisi `method`, `route`, `status`, `latency_ms`, `ip`, `request_id`, `user_id` (bila login), dan `err` (bila ada). Asal `ip` dijelaskan di [IP klien dan proxy](#ip-klien-dan-proxy). Status 5xx dicatat sebagai `ERROR`, sisanya `INFO`. `/api/v1/health` yang sukses tidak dicatat.
 - Log yang ditulis dengan context request otomatis membawa `request_id` dan `user_id`, sehingga bisa dicari bersama di log aggregator.
 - Panic dicatat sebagai `panic recovered` beserta stack trace, lalu dijawab 500.
 - Body request, header `Authorization`, token, password, dan API key tidak pernah dicatat; yang dicatat adalah pola route (`/api/v1/users/me`), bukan URL beserta query string.

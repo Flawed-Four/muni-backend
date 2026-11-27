@@ -85,7 +85,7 @@ func login(t *testing.T, email, password string) string {
 }
 
 func TestHealth(t *testing.T) {
-	rec := do(t, http.MethodGet, "/health", nil, "")
+	rec := do(t, http.MethodGet, "/api/v1/health", nil, "")
 	wantStatus(t, rec, http.StatusOK)
 }
 
