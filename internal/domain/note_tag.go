@@ -12,6 +12,7 @@ type NoteTag struct {
 }
 
 type NoteTagFilter struct {
+	UserID string // required: only tags on this user's notes are listed
 	NoteID string
 	Title  string
 	Limit  int

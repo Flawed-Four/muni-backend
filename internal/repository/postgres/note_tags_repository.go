@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Flawed-Four/muni-backend/internal/domain"
@@ -71,36 +72,41 @@ func (r *NoteTagRepository) ListByNoteIDs(ctx context.Context, noteIDs []string)
 }
 
 func (r *NoteTagRepository) List(ctx context.Context, filter domain.NoteTagFilter) ([]*domain.NoteTag, int, error) {
-	filterMap := map[string]interface{}{}
+	var noteID pgtype.UUID
 	if filter.NoteID != "" {
-		filterMap["notes_id"] = filter.NoteID
+		// An id that is not a valid UUID can never match a row.
+		if err := noteID.Scan(filter.NoteID); err != nil {
+			return nil, 0, domain.ErrNotFound
+		}
 	}
-	if filter.Title != "" {
-		filterMap["title"] = filter.Title
-	}
-	if filter.Limit > 0 {
-		filterMap["limit"] = filter.Limit
-	}
-	if filter.Offset >= 0 {
-		filterMap["offset"] = filter.Offset
-	}
+	title := pgtype.Text{String: filter.Title, Valid: filter.Title != ""}
 
-	rows, err := r.q.GetNoteTag(ctx, filterMap)
+	rows, err := r.q.ListUserNoteTags(ctx, sqlc.ListUserNoteTagsParams{
+		UserID:    filter.UserID,
+		NoteID:    noteID,
+		Title:     title,
+		RowLimit:  int64(filter.Limit),
+		RowOffset: int64(max(filter.Offset, 0)),
+	})
 	if err != nil {
 		return nil, 0, mapNoteTagErr(err, "list note tags")
 	}
 
-	total, err := r.q.CountNoteTag(ctx, filterMap)
+	total, err := r.q.CountUserNoteTags(ctx, sqlc.CountUserNoteTagsParams{
+		UserID: filter.UserID,
+		NoteID: noteID,
+		Title:  title,
+	})
 	if err != nil {
 		return nil, 0, mapNoteTagErr(err, "count note tags")
 	}
 
 	tags := make([]*domain.NoteTag, len(rows))
 	for i := range rows {
-		tags[i] = toDomainNoteTag(&rows[i])
+		tags[i] = toDomainNoteTag(&rows[i].NoteTag)
 	}
 
-	return tags, total, nil
+	return tags, int(total), nil
 }
 
 func (r *NoteTagRepository) Update(ctx context.Context, id string, title string) (*domain.NoteTag, error) {
