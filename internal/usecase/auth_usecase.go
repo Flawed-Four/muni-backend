@@ -48,6 +48,9 @@ func (u *AuthUsecase) Register(ctx context.Context, name, email, password string
 
 	hash, err := u.hasher.Hash(password)
 	if err != nil {
+		if errors.Is(err, domain.ErrPasswordTooLong) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 

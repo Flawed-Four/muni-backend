@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -95,10 +98,17 @@ type GeminiConfig struct {
 	BaseURL       string        `env:"GEMINI_BASE_URL"` // empty = Google's endpoint
 }
 
-// DSN returns the PostgreSQL connection string.
+// DSN returns the PostgreSQL connection string. Every part is escaped, so a
+// password like "p@ss/w#rd" stays one password instead of breaking the URL.
 func (c DBConfig) DSN() string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		c.User, c.Password, c.Host, c.Port, c.Name, c.SSLMode)
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(c.User, c.Password),
+		Host:     net.JoinHostPort(c.Host, strconv.Itoa(c.Port)),
+		Path:     "/" + c.Name,
+		RawQuery: url.Values{"sslmode": {c.SSLMode}}.Encode(),
+	}
+	return u.String()
 }
 
 // Load reads configuration from the environment, loading .env first if present.
